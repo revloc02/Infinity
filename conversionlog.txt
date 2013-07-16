@@ -9,3 +9,4 @@ NOTE: I created a new branch because of the way that my previous commits were pe
 Uleat: Created branch 'inventory_conversion_2' based on 'master' Revision 2331678 (commit 469) (The old one will be removed)
 Uleat: Added required sql files: Player_Inventory_Remap, Player_SharedBank_Remap and Swap_Slot_Wear_Bits
 Uleat: Purge of '\..\common\Item.h' and '\..\common\Item.cpp' files to facilitate rearrangement of classes and thier methods
+Uleat: File prep and clean-up of non-purged code in Item.h and Item.cpp

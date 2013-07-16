@@ -31,10 +31,11 @@
 #include <iostream>
 
 std::list<ItemInst*> dirty_inst;
+
 int32 NextItemInstSerialNumber = 1;
 
-static inline int32 GetNextItemInstSerialNumber() {
-
+static inline int32 GetNextItemInstSerialNumber()
+{
 	// The Bazaar relies on each item a client has up for Trade having a unique
 	// identifier. This 'SerialNumber' is sent in Serialized item packets and
 	// is used in Bazaar packets to identify the item a player is buying or inspecting.
@@ -45,73 +46,122 @@ static inline int32 GetNextItemInstSerialNumber() {
 	// NextItemInstSerialNumber is the next one to hand out.
 	//
 	// It is very unlikely to reach 2,147,483,647. Maybe we should call abort(), rather than wrapping back to 1.
-	if(NextItemInstSerialNumber >= INT_MAX)
-		NextItemInstSerialNumber = 1;
-	else
-		NextItemInstSerialNumber++;
+	
+	if(NextItemInstSerialNumber >= INT_MAX) { NextItemInstSerialNumber = 1; }
+	else { NextItemInstSerialNumber++; }
 
 	return NextItemInstSerialNumber;
 }
 
-EvolveInfo::EvolveInfo() {
+
+/*
+ Class: InventoryLimits ###########################################################################
+	Class to allow efficient coding of inventory restrictions. Slots are limited on a per-client
+	basis, allowing one segment of code to handle the entire range of clients instead of having
+	multiple version checks with specialized code for each.
+ ##################################################################################################
+*/
+
+// ################################################################################################
+
+
+/*
+ Class: Inventory #################################################################################
+	Client inventory
+ ##################################################################################################
+*/
+
+// ################################################################################################
+
+
+/*
+ Class: ItemInst ##################################################################################
+	Class for an instance of an item. An item instance encapsulates item data and data specific to
+	an item instance (includes dye, augments, charges, etc.) Now includes EvoItemInst properties
+ ##################################################################################################
+*/
+
+// ################################################################################################
+
+
+/*
+ Class: EvolveInfo ################################################################################
+	<description>
+ ##################################################################################################
+*/
+EvolveInfo::EvolveInfo()
+{
 	// nothing here yet
 }
 
-EvolveInfo::EvolveInfo(uint32 first, uint8 max, bool allkills, uint32 L2, uint32 L3, uint32 L4, uint32 L5, uint32 L6, uint32 L7, uint32 L8, uint32 L9, uint32 L10) {
-	FirstItem = first;
-	MaxLvl = max;
-	AllKills = allkills;
-	LvlKills[0] = L2;
-	LvlKills[1] = L3;
-	LvlKills[2] = L4;
-	LvlKills[3] = L5;
-	LvlKills[4] = L6;
-	LvlKills[5] = L7;
-	LvlKills[6] = L8;
-	LvlKills[7] = L9;
-	LvlKills[8] = L10;
+EvolveInfo::EvolveInfo(uint32 first, uint8 max, bool allkills, uint32 L2, uint32 L3, uint32 L4, uint32 L5, uint32 L6, uint32 L7, uint32 L8, uint32 L9, uint32 L10)
+{
+	FirstItem	= first;
+	MaxLvl		= max;
+	AllKills	= allkills;
+	LvlKills[0]	= L2;
+	LvlKills[1]	= L3;
+	LvlKills[2]	= L4;
+	LvlKills[3]	= L5;
+	LvlKills[4]	= L6;
+	LvlKills[5]	= L7;
+	LvlKills[6]	= L8;
+	LvlKills[7]	= L9;
+	LvlKills[8]	= L10;
 }
 
-EvolveInfo::~EvolveInfo() {
-}
+EvolveInfo::~EvolveInfo()
+{
 
-bool Item_Struct::IsEquipable(uint16 Race, uint16 Class_) const
+}
+// ################################################################################################
+
+
+/*
+ Structure: Item_Struct ###########################################################################
+	<description>
+ ##################################################################################################
+*/
+bool Item_Struct::IsEquipable(uint16 race_id, uint16 class_id) const
 {
 	bool IsRace = false;
 	bool IsClass = false;
 
 	uint32 Classes_ = Classes;
-
 	uint32 Races_ = Races;
 
-	uint32 Race_ = GetArrayRace(Race);
+	uint32 Race_ = GetArrayRace(race_id);
 
-	for (int CurrentClass = 1; CurrentClass <= PLAYER_CLASS_COUNT; ++CurrentClass)
+	for(int CurrentClass = 1; CurrentClass <= PLAYER_CLASS_COUNT; ++CurrentClass)
 	{
-		if (Classes_ % 2 == 1)
+		if(Classes_ % 2 == 1)
 		{
-			if (CurrentClass == Class_)
+			if(CurrentClass == class_id)
 			{
 					IsClass = true;
-				break;
+					break;
 			}
 		}
+
 		Classes_ >>= 1;
 	}
 
 	Race_ = (Race_ == 18 ? 16 : Race_);
 
-	for (unsigned int CurrentRace = 1; CurrentRace <= PLAYER_RACE_COUNT; ++CurrentRace)
+	for(unsigned int CurrentRace = 1; CurrentRace <= PLAYER_RACE_COUNT; ++CurrentRace)
 	{
-		if (Races_ % 2 == 1)
+		if(Races_ % 2 == 1)
 		{
-				if (CurrentRace == Race_)
+			if(CurrentRace == Race_)
 			{
-					IsRace = true;
+				IsRace = true;
 				break;
 			}
 		}
+
 		Races_ >>= 1;
 	}
+
 	return (IsRace && IsClass);
 }
+// ################################################################################################

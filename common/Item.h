@@ -38,12 +38,14 @@ class EvolveInfo;			// Stores information about an evolving item family
 #include "../common/timer.h"
 
 // Helper typedefs
-typedef std::map<int16, ItemInst*>::const_iterator			iter_inst;
-typedef std::map<uint8, ItemInst*>::const_iterator			iter_contents;
+typedef std::map<int16, ItemInst*>::const_iterator iter_inst;
+typedef std::map<uint8, ItemInst*>::const_iterator iter_contents;
 
-namespace ItemField {
-	enum {
-		source=0,
+namespace ItemField
+{
+	enum
+	{
+		source = 0,
 #define F(x) x,
 #include "item_fieldlist.h"
 #undef F
@@ -51,6 +53,7 @@ namespace ItemField {
 	};
 };
 
+// Depricated #defines -U
 // Indexing positions to the beginning slot_id's for a bucket of slots
 #define IDX_EQUIP		0
 #define IDX_CURSOR_BAG	331
@@ -73,16 +76,18 @@ enum ItemUseType
 	ItemUseWorldContainer
 };
 
-typedef enum {
+typedef enum
+{
 	byFlagIgnore,	//do not consider this flag
 	byFlagSet,		//apply action if the flag is set
 	byFlagNotSet	//apply action if the flag is NOT set
 } byFlagSetting;
 
-
+// Left in situ until deemed no longer needed (currently used for legacy scripting) -U
 //FatherNitwit: location bits for searching specific
 //places with HasItem() and HasItemByUse()
-enum {
+enum
+{
 	invWhereWorn		= 0x01,
 	invWherePersonal	= 0x02,	//in the character's inventory
 	invWhereBank		= 0x04,
@@ -93,14 +98,15 @@ enum {
 
 class SharedDatabase;
 
-class EvolveInfo {
+class EvolveInfo
+{
 public:
 	friend class ItemInst;
 	//temporary
-	uint16				LvlKills[9];
-	uint32				FirstItem;
-	uint8				MaxLvl;
-	bool				AllKills;
+	uint16	LvlKills[9];
+	uint32	FirstItem;
+	uint8	MaxLvl;
+	bool	AllKills;
 
 	EvolveInfo();
 	EvolveInfo(uint32 first, uint8 max, bool allkills, uint32 L2, uint32 L3, uint32 L4, uint32 L5, uint32 L6, uint32 L7, uint32 L8, uint32 L9, uint32 L10);
