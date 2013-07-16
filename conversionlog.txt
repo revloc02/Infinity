@@ -11,3 +11,4 @@ Uleat: Added required sql files: Player_Inventory_Remap, Player_SharedBank_Remap
 Uleat: Purge of '\..\common\Item.h' and '\..\common\Item.cpp' files to facilitate rearrangement of classes and thier methods
 Uleat: File prep and clean-up of non-purged code in Item.h and Item.cpp
 Uleat: File prep and clean-up of '\..\common\eq_constants.h'
+Uleat: Added #defines and enumerations for new 'InventoryLimits' class (will need to be tweaked once testing is available)
