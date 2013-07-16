@@ -59,20 +59,20 @@ enum ItemTypes
 	ItemType1HB				= 3,
 	ItemType2HB				= 4,
 	ItemTypeBow				= 5,
-	//6
+	// 6
 	ItemTypeThrowing		= 7,
 	ItemTypeShield			= 8,
-	//9
+	// 9
 	ItemTypeArmor			= 10,
-	ItemTypeUnknon			= 11,	//A lot of random crap has this item use.
+	ItemTypeUnknon			= 11,	// A lot of random crap has this item use.
 	ItemTypeLockPick		= 12,
 	ItemTypeFood			= 14,
 	ItemTypeDrink			= 15,
 	ItemTypeLightSource		= 16,
-	ItemTypeStackable		= 17,	//Not all stackable items are this use...
+	ItemTypeStackable		= 17,	// Not all stackable items are this use...
 	ItemTypeBandage			= 18,
 	ItemTypeThrowingv2		= 19,
-	ItemTypeSpell			= 20,	//spells and tomes
+	ItemTypeSpell			= 20,	// spells and tomes
 	ItemTypePotion			= 21,
 	ItemTypeWindInstr		= 23,
 	ItemTypeStringInstr		= 24,
@@ -90,7 +90,7 @@ enum ItemTypes
 	ItemTypeFishingBait		= 37,
 	ItemTypeAlcohol			= 38,
 	ItemTypeCompass			= 40,
-	ItemTypePoison			= 42,	//might be wrong, but includes poisons
+	ItemTypePoison			= 42,	// might be wrong, but includes poisons
 	ItemTypeHand2Hand		= 45,
 	ItemUseSinging			= 50,
 	ItemUseAllInstruments	= 51,
@@ -103,13 +103,14 @@ enum ItemTypes
 /*
 	Bag types
 */
-enum {
+enum
+{
 	bagTypeSmallBag		= 0,
 	bagTypeLargeBag		= 1,
 	bagTypeQuiver		= 2,
 	bagTypeBeltPouch	= 3,
 	bagTypeBandolier	= 8
-	//... there are 50 types
+	// ... there are 50 types
 };
 
 
@@ -117,33 +118,34 @@ enum {
 ** Item Effect Types
 **
 */
-enum {
-	ET_CombatProc = 0,
-	ET_ClickEffect = 1,
-	ET_WornEffect = 2,
-	ET_Expendable = 3,
-	ET_EquipClick = 4,
-	ET_ClickEffect2 = 5,	//name unknown
-	ET_Focus = 6,
-	ET_Scroll = 7
+enum
+{
+	ET_CombatProc	= 0,
+	ET_ClickEffect	= 1,
+	ET_WornEffect	= 2,
+	ET_Expendable	= 3,
+	ET_EquipClick	= 4,
+	ET_ClickEffect2	= 5,	// name unknown
+	ET_Focus		= 6,
+	ET_Scroll		= 7
 };
 
-//SpawnAppearance types:
+// SpawnAppearance types:
 #define AT_Die			0	// this causes the client to keel over and zone to bind point
 #define AT_WhoLevel		1	// the level that shows up on /who
 #define AT_Invis		3	// 0 = visible, 1 = invisible
 #define AT_PVP			4	// 0 = blue, 1 = pvp (red)
 #define AT_Light		5	// light type emitted by player (lightstone, shiny shield)
-#define AT_Anim			14	// 100=standing, 110=sitting, 111=ducking, 115=feigned, 105=looting
+#define AT_Anim			14	// 100 = standing, 110 = sitting, 111 = ducking, 115 = feigned, 105 = looting
 #define AT_Sneak		15	// 0 = normal, 1 = sneaking
 #define AT_SpawnID		16	// server to client, sets player spawn id
 #define AT_HP			17	// Client->Server, my HP has changed (like regen tic)
 #define AT_Linkdead		18	// 0 = normal, 1 = linkdead
-#define AT_Levitate		19	// 0=off, 1=flymode, 2=levitate
+#define AT_Levitate		19	// 0 = off, 1 = flymode, 2 = levitate
 #define AT_GM			20	// 0 = normal, 1 = GM - all odd numbers seem to make it GM
 #define AT_Anon			21	// 0 = normal, 1 = anon, 2 = roleplay
 #define AT_GuildID		22
-#define AT_GuildRank	23	// 0=member, 1=officer, 2=leader
+#define AT_GuildRank	23	// 0 = member, 1 = officer, 2 = leader
 #define AT_AFK			24	// 0 = normal, 1 = afk
 #define AT_Pet			25	// Param is EntityID of owner, or 0 for when charm breaks
 #define AT_Split		28	// 0 = normal, 1 = autosplit on
@@ -151,7 +153,7 @@ enum {
 #define AT_NPCName		31	// change PC's name's color to NPC color 0 = normal, 1 = npc name
 #define AT_ShowHelm		43	// 0 = do not show helmet graphic, 1 = show graphic
 #define AT_DamageState	44	// The damage state of a destructible object (0 through 4)
-//#define AT_Trader		300	// Bazzar Trader Mode
+// #define AT_Trader		300	// Bazzar Trader Mode
 
 // solar: animations for AT_Anim
 #define ANIM_FREEZE	102
@@ -161,12 +163,13 @@ enum {
 #define	ANIM_DEATH		0x73
 #define ANIM_LOOT		0x69
 
-typedef enum {
+typedef enum
+{
 	eaStanding = 0,
-	eaSitting,		//1
-	eaCrouching,	//2
-	eaDead,			//3
-	eaLooting,		//4
+	eaSitting,		// 1
+	eaCrouching,	// 2
+	eaDead,			// 3
+	eaLooting,		// 4
 	_eaMaxAppearance
 } EmuAppearance;
 
@@ -189,7 +192,7 @@ typedef enum {
 #define DEITY_TRIBUNAL			214
 #define DEITY_TUNARE			215
 
-//Guessed:
+// Guessed:
 #define DEITY_BERT				201
 #define DEITY_RODCET			212
 #define DEITY_VEESHAN			216
@@ -281,7 +284,7 @@ typedef enum {
 #define MT_StrikeThrough		339
 #define MT_Stun					340
 
-//from showeq
+// from showeq
 enum ChatColor
 {
 	CC_Default					= 0,
@@ -365,74 +368,76 @@ enum ChatColor
 };
 
 //ZoneChange_Struct->success values
-#define ZONE_ERROR_NOMSG 0
-#define ZONE_ERROR_NOTREADY -1
-#define ZONE_ERROR_VALIDPC -2
-#define ZONE_ERROR_STORYZONE -3
-#define ZONE_ERROR_NOEXPANSION -6
-#define ZONE_ERROR_NOEXPERIENCE -7
+#define ZONE_ERROR_NOMSG		0
+#define ZONE_ERROR_NOTREADY		-1
+#define ZONE_ERROR_VALIDPC		-2
+#define ZONE_ERROR_STORYZONE	-3
+#define ZONE_ERROR_NOEXPANSION	-6
+#define ZONE_ERROR_NOEXPERIENCE	-7
 
 
-typedef enum {
-	FilterNone = 0,
-	FilterGuildChat = 1,		//0=hide, 1=show
-	FilterSocials = 2,			//0=hide, 1=show
-	FilterGroupChat = 3,		//0=hide, 1=show
-	FilterShouts = 4,			//0=hide, 1=show
-	FilterAuctions = 5,			//0=hide, 1=show
-	FilterOOC = 6,				//0=hide, 1=show
-	FilterBadWords = 7,			//0=hide, 1=show
-	FilterPCSpells = 8,			//0=show, 1=hide, 2=group only
-	FilterNPCSpells = 9,		//0=show, 1=hide
-	FilterBardSongs = 10,		//0=show, 1=mine only, 2=group only, 3=hide
-	FilterSpellCrits = 11,		//0=show, 1=mine only, 2=hide
-	FilterMeleeCrits = 12,		//0=show, 1=hide
-	FilterSpellDamage = 13,		//0=show, 1=mine only, 2=hide
-	FilterMyMisses = 14,		//0=hide, 1=show
-	FilterOthersMiss = 15,		//0=hide, 1=show
-	FilterOthersHit = 16,		//0=hide, 1=show
-	FilterMissedMe = 17,		//0=hide, 1=show
-	FilterDamageShields = 18,	//0=show, 1=hide
-	FilterDOT = 19,				//0=show, 1=hide
-	FilterPetHits = 20,			//0=show, 1=hide
-	FilterPetMisses = 21,		//0=show, 1=hide
-	FilterFocusEffects = 22,	//0=show, 1=hide
-	FilterPetSpells = 23,		//0=show, 1=hide
-	FilterHealOverTime = 24,	//0=show, 1=hide
-	FilterUnknown25 = 25,
-	FilterUnknown26 = 26,
-	FilterUnknown27 = 27,
-	FilterUnknown28 = 28,
+typedef enum
+{
+	FilterNone			= 0,
+	FilterGuildChat		= 1,	// 0 = hide, 1 = show
+	FilterSocials		= 2,	// 0 = hide, 1 = show
+	FilterGroupChat		= 3,	// 0 = hide, 1 = show
+	FilterShouts		= 4,	// 0 = hide, 1 = show
+	FilterAuctions		= 5,	// 0 = hide, 1 = show
+	FilterOOC			= 6,	// 0 = hide, 1 = show
+	FilterBadWords		= 7,	// 0 = hide, 1 = show
+	FilterPCSpells		= 8,	// 0 = show, 1 = hide, 2 = group only
+	FilterNPCSpells		= 9,	// 0 = show, 1 = hide
+	FilterBardSongs		= 10,	// 0 = show, 1 = mine only, 2 = group only, 3 = hide
+	FilterSpellCrits	= 11,	// 0 = show, 1 = mine only, 2 = hide
+	FilterMeleeCrits	= 12,	// 0 = show, 1 = hide
+	FilterSpellDamage	= 13,	// 0 = show, 1 = mine only, 2 = hide
+	FilterMyMisses		= 14,	// 0 = hide, 1 = show
+	FilterOthersMiss	= 15,	// 0 = hide, 1 = show
+	FilterOthersHit		= 16,	// 0 = hide, 1 = show
+	FilterMissedMe		= 17,	// 0 = hide, 1 = show
+	FilterDamageShields	= 18,	// 0 = show, 1 = hide
+	FilterDOT			= 19,	// 0 = show, 1 = hide
+	FilterPetHits		= 20,	// 0 = show, 1 = hide
+	FilterPetMisses		= 21,	// 0 = show, 1 = hide
+	FilterFocusEffects	= 22,	// 0 = show, 1 = hide
+	FilterPetSpells		= 23,	// 0 = show, 1 = hide
+	FilterHealOverTime	= 24,	// 0 = show, 1 = hide
+	FilterUnknown25		= 25,
+	FilterUnknown26		= 26,
+	FilterUnknown27		= 27,
+	FilterUnknown28		= 28,
 	_FilterCount
 } eqFilterType;
 
-typedef enum {
+typedef enum
+{
 	FilterHide,
 	FilterShow,
 	FilterShowGroupOnly,
 	FilterShowSelfOnly
 } eqFilterMode;
 
-#define	STAT_STR		0
-#define	STAT_STA		1
-#define	STAT_AGI		2
-#define	STAT_DEX		3
-#define	STAT_INT		4
-#define	STAT_WIS		5
-#define	STAT_CHA		6
-#define	STAT_MAGIC		7
-#define	STAT_COLD		8
-#define	STAT_FIRE		9
-#define	STAT_POISON		10
+#define	STAT_STR			0
+#define	STAT_STA			1
+#define	STAT_AGI			2
+#define	STAT_DEX			3
+#define	STAT_INT			4
+#define	STAT_WIS			5
+#define	STAT_CHA			6
+#define	STAT_MAGIC			7
+#define	STAT_COLD			8
+#define	STAT_FIRE			9
+#define	STAT_POISON			10
 #define	STAT_DISEASE		11
-#define	STAT_MANA		12
-#define	STAT_HP			13
-#define	STAT_AC			14
+#define	STAT_MANA			12
+#define	STAT_HP				13
+#define	STAT_AC				14
 #define STAT_ENDURANCE		15
-#define STAT_ATTACK		16
+#define STAT_ATTACK			16
 #define STAT_HP_REGEN		17
 #define STAT_MANA_REGEN		18
-#define STAT_HASTE		19
+#define STAT_HASTE			19
 #define STAT_DAMAGE_SHIELD	20
 
 /**
@@ -442,14 +447,14 @@ enum RecastTypes
 {
 	RecastTimer0 = 0,
 	RecastTimer1,
-	WeaponHealClickTimer, // 2
-	MuramiteBaneNukeClickTimer, // 3
+	WeaponHealClickTimer,		// 2
+	MuramiteBaneNukeClickTimer,	// 3
 	RecastTimer4,
-	DispellClickTimer, // 5 (also click heal orbs?)
-	EpicTimer, // 6
-	OoWBPClickTimer, // 7
-	VishQuestClassItemTimer, // 8
-	HealPotionTimer, // 9
+	DispellClickTimer,			// 5 (also click heal orbs?)
+	EpicTimer,					// 6
+	OoWBPClickTimer,			// 7
+	VishQuestClassItemTimer,	// 8
+	HealPotionTimer,			// 9
 	RecastTimer10,
 	RecastTimer11,
 	RecastTimer12,
@@ -459,101 +464,102 @@ enum RecastTypes
 	RecastTimer16,
 	RecastTimer17,
 	RecastTimer18,
-	ModRodTimer // 19
+	ModRodTimer					// 19
 };
 
 enum GroupUpdateAction
 {
-	GUA_Joined = 0,
-	GUA_Left = 1,
-	GUA_LastLeft = 6,
-	GUA_FullGroupInfo = 7,
-	GUA_MakeLeader = 8,
-	GUA_Started = 9
+	GUA_Joined			= 0,
+	GUA_Left			= 1,
+	GUA_LastLeft		= 6,
+	GUA_FullGroupInfo	= 7,
+	GUA_MakeLeader		= 8,
+	GUA_Started			= 9
 };
 
 //0x1c is something...
-static const uint8 FallingDamageType = 0xFC;
-static const uint8 SpellDamageType = 0xe7;
-static const uint8 DamageTypeUnknown = 0xFF;
+static const uint8 FallingDamageType	= 0xFC;
+static const uint8 SpellDamageType		= 0xe7;
+static const uint8 DamageTypeUnknown	= 0xFF;
 
 //indexed by 'SkillType'
-static const uint8 SkillDamageTypes[HIGHEST_SKILL+1] = {
-	/* _1H_BLUNT */ 0,
-	/* _1H_SLASHING */ 1,
-	/* _2H_BLUNT */ 0,
-	/* _2H_SLASHING */ 1,
-	/* ABJURE */ SpellDamageType,
-	/* ALTERATION */ SpellDamageType,
-	/* APPLY_POISON */ DamageTypeUnknown,
-	/* ARCHERY */ 7,
-	/* BACKSTAB */ 8,
-	/* BIND_WOUND */ DamageTypeUnknown,
-	/* BASH */ 10,
-	/* BLOCKSKILL */ DamageTypeUnknown,
-	/* BRASS_INSTRUMENTS */ SpellDamageType,
-	/* CHANNELING */ DamageTypeUnknown,
-	/* CONJURATION */ SpellDamageType,
-	/* DEFENSE */ DamageTypeUnknown,
-	/* DISARM */ DamageTypeUnknown,
-	/* DISARM_TRAPS */ DamageTypeUnknown,
-	/* DIVINATION */ SpellDamageType,
-	/* DODGE */ DamageTypeUnknown,
-	/* DOUBLE_ATTACK */ DamageTypeUnknown,
-	/* DRAGON_PUNCH */ 21,
-	/* DUAL_WIELD */ DamageTypeUnknown,
-	/* EAGLE_STRIKE */ 23,
-	/* EVOCATION */ SpellDamageType,
-	/* FEIGN_DEATH */ 4,
-	/* FLYING_KICK */ 30,
-	/* FORAGE */ DamageTypeUnknown,
-	/* HAND_TO_HAND */ 4,
-	/* HIDE */ DamageTypeUnknown,
-	/* KICK */ 30,
-	/* MEDITATE */ DamageTypeUnknown,
-	/* MEND */ DamageTypeUnknown,
-	/* OFFENSE */ DamageTypeUnknown,
-	/* PARRY */ DamageTypeUnknown,
-	/* PICK_LOCK */ DamageTypeUnknown,
-	/* PIERCING */ 36,
-	/* RIPOSTE */ DamageTypeUnknown,
-	/* ROUND_KICK */ 30,
-	/* SAFE_FALL */ DamageTypeUnknown,
-	/* SENSE_HEADING */ DamageTypeUnknown,
-	/* SINGING */ SpellDamageType,
-	/* SNEAK */ DamageTypeUnknown,
-	/* SPECIALIZE_ABJURE */ DamageTypeUnknown,
-	/* SPECIALIZE_ALTERATION */ DamageTypeUnknown,
-	/* SPECIALIZE_CONJURATION */ DamageTypeUnknown,
-	/* SPECIALIZE_DIVINATION */ DamageTypeUnknown,
-	/* SPECIALIZE_EVOCATION */ DamageTypeUnknown,
-	/* PICK_POCKETS */ DamageTypeUnknown,
-	/* STRINGED_INSTRUMENTS */ SpellDamageType,
-	/* SWIMMING */ DamageTypeUnknown,
-	/* THROWING */ 51,
-	/* TIGER_CLAW */ 23,
-	/* TRACKING */ DamageTypeUnknown,
-	/* WIND_INSTRUMENTS */ SpellDamageType,
-	/* FISHING */ DamageTypeUnknown,
-	/* MAKE_POISON */ DamageTypeUnknown,
-	/* TINKERING */ DamageTypeUnknown,
-	/* RESEARCH */ DamageTypeUnknown,
-	/* ALCHEMY */ DamageTypeUnknown,
-	/* BAKING */ DamageTypeUnknown,
-	/* TAILORING */ DamageTypeUnknown,
-	/* SENSE_TRAPS */ DamageTypeUnknown,
-	/* BLACKSMITHING */ DamageTypeUnknown,
-	/* FLETCHING */ DamageTypeUnknown,
-	/* BREWING */ DamageTypeUnknown,
-	/* ALCOHOL_TOLERANCE */ DamageTypeUnknown,
-	/* BEGGING */ DamageTypeUnknown,
-	/* JEWELRY_MAKING */ DamageTypeUnknown,
-	/* POTTERY */ DamageTypeUnknown,
-	/* PERCUSSION_INSTRUMENTS */ SpellDamageType,
-	/* INTIMIDATION */ DamageTypeUnknown,
-	/* BERSERKING */ DamageTypeUnknown,
-	/* TAUNT */ DamageTypeUnknown,
-	/* FRENZY */ 74
+static const uint8 SkillDamageTypes[HIGHEST_SKILL + 1] =
+{
+	/* _1H_BLUNT */				0,
+	/* _1H_SLASHING */			1,
+	/* _2H_BLUNT */				0,
+	/* _2H_SLASHING */			1,
+	/* ABJURE */				SpellDamageType,
+	/* ALTERATION */			SpellDamageType,
+	/* APPLY_POISON */			DamageTypeUnknown,
+	/* ARCHERY */				7,
+	/* BACKSTAB */				8,
+	/* BIND_WOUND */			DamageTypeUnknown,
+	/* BASH */					10,
+	/* BLOCKSKILL */			DamageTypeUnknown,
+	/* BRASS_INSTRUMENTS */		SpellDamageType,
+	/* CHANNELING */			DamageTypeUnknown,
+	/* CONJURATION */			SpellDamageType,
+	/* DEFENSE */				DamageTypeUnknown,
+	/* DISARM */				DamageTypeUnknown,
+	/* DISARM_TRAPS */			DamageTypeUnknown,
+	/* DIVINATION */			SpellDamageType,
+	/* DODGE */					DamageTypeUnknown,
+	/* DOUBLE_ATTACK */			DamageTypeUnknown,
+	/* DRAGON_PUNCH */			21,
+	/* DUAL_WIELD */			DamageTypeUnknown,
+	/* EAGLE_STRIKE */			23,
+	/* EVOCATION */				SpellDamageType,
+	/* FEIGN_DEATH */			4,
+	/* FLYING_KICK */			30,
+	/* FORAGE */				DamageTypeUnknown,
+	/* HAND_TO_HAND */			4,
+	/* HIDE */					DamageTypeUnknown,
+	/* KICK */					30,
+	/* MEDITATE */				DamageTypeUnknown,
+	/* MEND */					DamageTypeUnknown,
+	/* OFFENSE */				DamageTypeUnknown,
+	/* PARRY */					DamageTypeUnknown,
+	/* PICK_LOCK */				DamageTypeUnknown,
+	/* PIERCING */				36,
+	/* RIPOSTE */				DamageTypeUnknown,
+	/* ROUND_KICK */			30,
+	/* SAFE_FALL */				DamageTypeUnknown,
+	/* SENSE_HEADING */			DamageTypeUnknown,
+	/* SINGING */				SpellDamageType,
+	/* SNEAK */					DamageTypeUnknown,
+	/* SPECIALIZE_ABJURE */		DamageTypeUnknown,
+	/* SPECIALIZE_ALTERATION */	DamageTypeUnknown,
+	/* SPECIALIZE_CONJURATION */	DamageTypeUnknown,
+	/* SPECIALIZE_DIVINATION */	DamageTypeUnknown,
+	/* SPECIALIZE_EVOCATION */	DamageTypeUnknown,
+	/* PICK_POCKETS */			DamageTypeUnknown,
+	/* STRINGED_INSTRUMENTS */	SpellDamageType,
+	/* SWIMMING */				DamageTypeUnknown,
+	/* THROWING */				51,
+	/* TIGER_CLAW */			23,
+	/* TRACKING */				DamageTypeUnknown,
+	/* WIND_INSTRUMENTS */		SpellDamageType,
+	/* FISHING */				DamageTypeUnknown,
+	/* MAKE_POISON */			DamageTypeUnknown,
+	/* TINKERING */				DamageTypeUnknown,
+	/* RESEARCH */				DamageTypeUnknown,
+	/* ALCHEMY */				DamageTypeUnknown,
+	/* BAKING */				DamageTypeUnknown,
+	/* TAILORING */				DamageTypeUnknown,
+	/* SENSE_TRAPS */			DamageTypeUnknown,
+	/* BLACKSMITHING */			DamageTypeUnknown,
+	/* FLETCHING */				DamageTypeUnknown,
+	/* BREWING */				DamageTypeUnknown,
+	/* ALCOHOL_TOLERANCE */		DamageTypeUnknown,
+	/* BEGGING */				DamageTypeUnknown,
+	/* JEWELRY_MAKING */		DamageTypeUnknown,
+	/* POTTERY */				DamageTypeUnknown,
+	/* PERCUSSION_INSTRUMENTS */	SpellDamageType,
+	/* INTIMIDATION */			DamageTypeUnknown,
+	/* BERSERKING */			DamageTypeUnknown,
+	/* TAUNT */					DamageTypeUnknown,
+	/* FRENZY */				74
 };
 
 // Indexing positions into item material arrays
@@ -567,27 +573,42 @@ static const uint8 SkillDamageTypes[HIGHEST_SKILL+1] = {
 #define MATERIAL_PRIMARY	7
 #define MATERIAL_SECONDARY	8
 #define MAX_MATERIALS		9	//number of equipables
+#define MATERIAL_INVALID	0xFF
 
 // Used for worn NPC inventory tracking. NPCs don't use
 // augments, so only the basic slots need to be kept track of.
 #define MAX_WORN_INVENTORY	22
 
-
 /*
 ** Inventory Slot Equipment Enum
 ** Mostly used for third-party tools to reference inventory slots
 **
+** [pre-HoT]
 ** NOTE: Numbering for personal inventory goes top to bottom, then left to right
 **	It's the opposite for inside bags: left to right, then top to bottom
 **	Example:
 **	inventory:	containers:
-**	1 6			1 2
-**	2 7			3 4
-**	3 8			5 6
-**	4 9			7 8
-**	5 10		9 10
+**	1  6			1  2
+**	2  7			3  4
+**	3  8			5  6
+**	4  9			7  8
+**	5  10			9  10
+**
+** [HoT and higher]
+** NOTE: Numbering for personal inventory goes left to right, then to to bottom
+**  for both inventory and bags.
+**  Example:
+**	inventory:	containers:
+**	1  2			1  2
+**	3  4			3  4
+**	5  6			5  6
+**	7  8			7  8
+**	9  10			9  10
+**  11 12			11 12	[NOTE: Additional slots are only available in RoF and higher]
 **
 */
+
+// U: Legacy enumeration..will be deleted
 enum InventorySlot
 {
 	////////////////////////
@@ -651,10 +672,8 @@ enum InventorySlot
 	// Slot used in OP_TradeSkillCombine for world tradeskill containers
 	SLOT_TRADESKILL = 1000,
 	SLOT_AUGMENT = 1001,
-	SLOT_POWER_SOURCE = 9999,
+	// SLOT_POWER_SOURCE = 9999,
 	// Value recognized by client for destroying an item
 	SLOT_INVALID = (int16)0xFFFF
 };
-
-
 #endif
