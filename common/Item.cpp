@@ -30,6 +30,42 @@
 #include <sstream>
 #include <iostream>
 
+// Reflects the current server limits, which is currently set for Steam RoF v2
+const int16 ServerInventoryLimits[SlotType_Count] =
+{
+	SIZE_POSSESSIONS,			/* Type 0 */	SIZE_BANK,					/* Type 1 */
+	SIZE_SHAREDBANK,			/* Type 2 */	SIZE_TRADE,					/* Type 3 */
+	SIZE_WORLD,					/* Type 4 */	SIZE_LIMBO,					/* Type 5 */
+	SIZE_TRIBUTE,				/* Type 6 */	SIZE_TROPHYTRIBUTE,			/* Type 7 */
+	SIZE_GUILDTRIBUTE,			/* Type 8 */	SIZE_MERCHANT,				/* Type 9 */
+	SIZE_DELETED,				/* Type 10 */	SIZE_CORPSE,				/* Type 11 */
+	SIZE_BAZAAR,				/* Type 12 */	SIZE_INSPECT,				/* Type 13 */
+	SIZE_REALESTATE,			/* Type 14 */	SIZE_VIEWMODPC,				/* Type 15 */
+	SIZE_VIEWMODBANK,			/* Type 16 */	SIZE_VIEWMODSHAREDBANK,		/* Type 17 */
+	SIZE_VIEWMODLIMBO,			/* Type 18 */	SIZE_ALTSTORAGE,			/* Type 19 */
+	SIZE_ARCHIVED,				/* Type 20 */	SIZE_MAIL,					/* Type 21 */
+	SIZE_GUILDTROPHYTRIBUTE,	/* Type 22 */	SIZE_KRONO,					/* Type 23 */
+	SIZE_OTHER					/* Type 24 */
+};
+
+// Non-Client slot type sizes (Set slot types unused by NPC to SIZE_UNUSED)
+const int16 MobInventoryLimits[SlotType_Count] =
+{
+	SIZE_POSSESSIONS,			/* Type 0 */	SIZE_UNUSED,				/* Type 1 */
+	SIZE_UNUSED,				/* Type 2 */	SIZE_TRADE,					/* Type 3 */
+	SIZE_UNUSED,				/* Type 4 */	SIZE_UNUSED,				/* Type 5 */
+	SIZE_TRIBUTE,				/* Type 6 */	SIZE_TROPHYTRIBUTE,			/* Type 7 */
+	SIZE_GUILDTRIBUTE,			/* Type 8 */	SIZE_MERCHANT,				/* Type 9 */
+	SIZE_DELETED,				/* Type 10 */	SIZE_CORPSE,				/* Type 11 */
+	SIZE_BAZAAR,				/* Type 12 */	SIZE_INSPECT,				/* Type 13 */
+	SIZE_UNUSED,				/* Type 14 */	SIZE_UNUSED,				/* Type 15 */
+	SIZE_UNUSED,				/* Type 16 */	SIZE_UNUSED,				/* Type 17 */
+	SIZE_UNUSED,				/* Type 18 */	SIZE_UNUSED,				/* Type 19 */
+	SIZE_UNUSED,				/* Type 20 */	SIZE_UNUSED,				/* Type 21 */
+	SIZE_GUILDTROPHYTRIBUTE,	/* Type 22 */	SIZE_UNUSED,				/* Type 23 */
+	SIZE_UNUSED					/* Type 24 */
+};
+
 std::list<ItemInst*> dirty_inst;
 
 int32 NextItemInstSerialNumber = 1;
@@ -61,7 +97,136 @@ static inline int32 GetNextItemInstSerialNumber()
 	multiple version checks with specialized code for each.
  ##################################################################################################
 */
+InventoryLimits::~InventoryLimits()
+{
+	memset(this, 0, sizeof(InventoryLimits));
+}
 
+bool InventoryLimits::SetServerInventoryLimits(InventoryLimits &limits)
+{
+	if(limits.m_limits_set) { return false; }
+	
+	memcpy(limits.m_slottypesize, ServerInventoryLimits, sizeof(InventoryLimits.m_slottypesize));
+
+	limits.m_equipmentstart								= EQUIPMENT_START;
+	limits.m_equipmentend								= EQUIPMENT_END;
+	limits.m_equipmentbitmask							= EQUIPMENT_BITMASK;
+	limits.m_personalstart								= PERSONAL_START;
+	limits.m_personalend								= PERSONAL_END;
+	limits.m_personalbitmask							= PERSONAL_BITMASK;
+
+	limits.m_bandolierslotsmax							= MAX_BANDOLIERSLOTS;
+	limits.m_potionbeltslotsmax							= MAX_POTIONBELTSLOTS;
+	limits.m_bagslotsmax								= MAX_BAGSLOTS;
+	limits.m_augmentsmax								= MAX_AUGMENTS;
+
+	limits.m_limits_set = true;
+
+	return true;
+}
+
+bool InventoryLimits::SetMobInventoryLimits(InventoryLimits &limits)
+{
+	// If the mob class and its derived classes (npc, bot, etc...) are ever overhauled/developed, this
+	// function can be changed to allow use of the full inventory function that a client has access to
+	if(limits.m_limits_set) { return false; }
+
+	memcpy(limits.m_slottypesize, MobInventoryLimits, sizeof(InventoryLimits.m_slottypesize));
+	
+	limits.m_equipmentstart								= EQUIPMENT_START;
+	limits.m_equipmentend								= EQUIPMENT_END;
+	limits.m_equipmentbitmask							= EQUIPMENT_BITMASK;
+	limits.m_personalstart								= MAINSLOT_INVALID;
+	limits.m_personalend								= MAINSLOT_INVALID;
+	limits.m_personalbitmask							= SIZE_UNUSED;
+
+	limits.m_bandolierslotsmax							= SIZE_UNUSED;
+	limits.m_potionbeltslotsmax							= SIZE_UNUSED;
+	limits.m_bagslotsmax								= SIZE_UNUSED;
+	limits.m_augmentsmax								= SIZE_UNUSED;
+
+	limits.m_limits_set = true;
+
+	return true;
+}
+
+bool InventoryLimits::SetClientInventoryLimits(InventoryLimits &limits, EQClientVersion client_version)
+{
+	// In addition to the #define's needing work, all of the client ranges need to be verified here -U
+	if(limits.m_limits_set) { return false; }
+	
+	SetServerInventoryLimits(limits);
+
+	// Add new clients in descending order
+	if(client_version < EQClientRoF)
+	{
+		limits.m_slottypesize[SlotType_Possessions]			= SIZE_POSSESSIONS_PRE_ROF;
+		limits.m_slottypesize[SlotType_Corpse]				= SIZE_CORPSE_PRE_ROF;
+		limits.m_slottypesize[SlotType_Bazaar]				= SIZE_BAZAAR_PRE_ROF;
+			
+		limits.m_personalend								= PERSONAL_END_PRE_ROF;
+		limits.m_personalbitmask							= PERSONAL_BITMASK_PRE_ROF;
+
+		limits.m_bagslotsmax								= MAX_BAGSLOTS_PRE_ROF;
+		limits.m_augmentsmax								= MAX_AUGMENTS_PRE_ROF;
+	}
+
+	if(client_version < EQClientUnderfoot)
+	{
+
+	}
+
+	if(client_version < EQClientSoD)
+	{
+
+	}
+
+	if(client_version < EQClientSoF)
+	{
+		limits.m_slottypesize[SlotType_Possessions]			= SIZE_POSSESSIONS_PRE_SOF;
+		limits.m_slottypesize[SlotType_Corpse]				= SIZE_CORPSE_PRE_SOF;
+		limits.m_slottypesize[SlotType_Bank]				= SIZE_BANK_PRE_SOF;
+
+		limits.m_equipmentbitmask							= EQUIPMENT_BITMASK_PRE_SOF;
+	}
+
+	if(client_version < EQClientTitanium)
+	{
+		limits.m_slottypesize[SlotType_Possessions]			= SIZE_POSSESSIONS_PRE_TI;
+		limits.m_slottypesize[SlotType_Corpse]				= SIZE_CORPSE_PRE_TI;
+
+		limits.m_equipmentbitmask							= EQUIPMENT_BITMASK_PRE_TI;
+	}
+
+	if(client_version < EQClient62) // If we got here, we screwed the pooch somehow...
+	{
+		// TODO: log error message
+		limits.ResetInventoryLimits();
+	}
+
+	limits.m_limits_set = true;
+
+	return true;
+}
+
+void InventoryLimits::ResetInventoryLimits()
+{
+	memset(this->m_slottypesize, 0, sizeof(InventoryLimits.m_slottypesize));
+	
+	m_equipmentstart	= MAINSLOT_INVALID;
+	m_equipmentend		= MAINSLOT_INVALID;
+	m_equipmentbitmask	= SIZE_UNUSED;
+	m_personalstart		= MAINSLOT_INVALID;
+	m_personalend		= MAINSLOT_INVALID;
+	m_personalbitmask	= SIZE_UNUSED;
+
+	m_bandolierslotsmax		= SIZE_UNUSED;
+	m_potionbeltslotsmax	= SIZE_UNUSED;
+	m_bagslotsmax			= SIZE_UNUSED;
+	m_augmentsmax			= SIZE_UNUSED;
+
+	m_limits_set = false;
+}
 // ################################################################################################
 
 

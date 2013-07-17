@@ -511,6 +511,12 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	ClientVersion = Connection()->ClientVersion();
 	ClientVersionBit = 1 << (ClientVersion - 1);
 
+	if(!InventoryLimits::SetClientInventoryLimits(m_inv.GetLimits(), ClientVersion))
+	{
+		m_inv.GetLimits().ResetInventoryLimits();
+		InventoryLimits::SetClientInventoryLimits(m_inv.GetLimits(), ClientVersion);
+	}
+
 	// Antighost code
 	// tmp var is so the search doesnt find this object
 	Client* client = entity_list.GetClientByName(cze->char_name);

@@ -24,6 +24,7 @@
 #define __ITEM_H
 
 class ItemInst;				// Item belonging to a client (contains info on item, dye, augments, charges, etc)
+class InventoryLimits;		// Client-based limits class
 class Inventory;			// Character inventory
 class ItemParse;			// Parses item packets
 class EvolveInfo;			// Stores information about an evolving item family
@@ -35,6 +36,7 @@ class EvolveInfo;			// Stores information about an evolving item family
 #include "../common/eq_packet_structs.h"
 #include "../common/eq_constants.h"
 #include "../common/item_struct.h"
+#include "../common/clientversions.h"
 #include "../common/timer.h"
 
 // Helper typedefs
@@ -94,6 +96,51 @@ enum
 	invWhereSharedBank	= 0x08,
 	invWhereTrading		= 0x10,
 	invWhereCursor		= 0x20
+};
+
+class InventoryLimits
+{
+public:
+	~InventoryLimits();
+
+	static bool		SetServerInventoryLimits(InventoryLimits &limits);
+	static bool		SetMobInventoryLimits(InventoryLimits &limits);
+	static bool		SetClientInventoryLimits(InventoryLimits &limits, EQClientVersion client_version = EQClientUnknown);
+	
+	void			ResetInventoryLimits();
+	inline bool		IsLimitsSet() const { return m_limits_set; }
+
+	inline int16	GetSlotTypeSize(int16 slot_type)	const { return (slot_type >= SLOTTYPE_START && slot_type < SlotType_Count) ? m_slottypesize[slot_type] : 0; }
+	inline int16	operator[](int16 slot_type)			const { return GetSlotTypeSize(slot_type); }
+
+	inline int16	GetEquipmentStart()					const { return m_equipmentstart; }
+	inline int16	GetEquipmentEnd()					const { return m_equipmentend; }
+	inline uint32	GetEquipmentBitMask()				const { return m_equipmentbitmask; }
+	inline int16	GetPersonalStart()					const { return m_personalstart; }
+	inline int16	GetPersonalEnd()					const { return m_personalend; }
+	inline uint32	GetPersonalBitMask()				const { return m_personalbitmask; }
+
+	inline uint8	GetBandolierSlotsMax()				const { return m_bandolierslotsmax; }
+	inline uint8	GetPotionBeltSlotsMax()				const { return m_potionbeltslotsmax; }
+	inline uint8	GetBagSlotsMax()					const { return m_bagslotsmax; }
+	inline uint8	GetAugmentsMax()					const { return m_augmentsmax; }
+
+private:
+	int16			m_slottypesize[SlotType_Count];
+
+	int16			m_equipmentstart;
+	int16			m_equipmentend;
+	uint32			m_equipmentbitmask;
+	int16			m_personalstart;
+	int16			m_personalend;
+	uint32			m_personalbitmask;
+
+	uint8			m_bandolierslotsmax;
+	uint8			m_potionbeltslotsmax;
+	uint8			m_bagslotsmax;
+	uint8			m_augmentsmax;
+
+	bool			m_limits_set;
 };
 
 class SharedDatabase;
