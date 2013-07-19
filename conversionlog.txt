@@ -2,6 +2,9 @@ EQEMu Inventory Conversion log (Started on July 16, 2013 04:51)
 ---------------------------------------------------------------
 Status: NOT COMPILABLE
 ---------------------------------------------------------------
+== 07/19/2013 ==
+Uleat: Added modified class 'ItemInst' - some functions have been reworked to help alleviate cheating
+
 == 07/17/2013 ==
 Uleat: Added new class 'InventoryLimits' to facilitate client-based inventory transactions (version variables still need research)
 
