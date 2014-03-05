@@ -54,7 +54,7 @@ static inline int32 GetNextItemInstSerialNumber() {
 }
 
 ItemInst::ItemInst(const Item_Struct* item, int16 charges) {
-	m_use_type = ItemUseNormal;
+	m_use_type = ItemInstNormal;
 	m_item = item;
 	m_charges = charges;
 	m_price = 0;
@@ -76,7 +76,7 @@ ItemInst::ItemInst(const Item_Struct* item, int16 charges) {
 }
 
 ItemInst::ItemInst(SharedDatabase *db, uint32 item_id, int16 charges) {
-	m_use_type = ItemUseNormal;
+	m_use_type = ItemInstNormal;
 	m_item = db->GetItem(item_id);
 	m_charges = charges;
 	m_price = 0;
@@ -101,7 +101,7 @@ ItemInstQueue::~ItemInstQueue() {
 	iter_queue cur,end;
 	cur = m_list.begin();
 	end = m_list.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		ItemInst *tmp = * cur;
 		safe_delete(tmp);
 	}
@@ -113,7 +113,7 @@ Inventory::~Inventory() {
 
 	cur = m_worn.begin();
 	end = m_worn.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		ItemInst *tmp = cur->second;
 		safe_delete(tmp);
 	}
@@ -121,7 +121,7 @@ Inventory::~Inventory() {
 
 	cur = m_inv.begin();
 	end = m_inv.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		ItemInst *tmp = cur->second;
 		safe_delete(tmp);
 	}
@@ -129,7 +129,7 @@ Inventory::~Inventory() {
 
 	cur = m_bank.begin();
 	end = m_bank.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		ItemInst *tmp = cur->second;
 		safe_delete(tmp);
 	}
@@ -137,7 +137,7 @@ Inventory::~Inventory() {
 
 	cur = m_shbank.begin();
 	end = m_shbank.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		ItemInst *tmp = cur->second;
 		safe_delete(tmp);
 	}
@@ -145,7 +145,7 @@ Inventory::~Inventory() {
 
 	cur = m_trade.begin();
 	end = m_trade.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		ItemInst *tmp = cur->second;
 		safe_delete(tmp);
 	}
@@ -166,7 +166,7 @@ ItemInst::ItemInst(const ItemInst& copy)
 	m_merchantcount=copy.m_merchantcount;
 	// Copy container contents
 	iter_contents it;
-	for (it=copy.m_contents.begin(); it!=copy.m_contents.end(); it++) {
+	for (it=copy.m_contents.begin(); it!=copy.m_contents.end(); ++it) {
 		ItemInst* inst_old = it->second;
 		ItemInst* inst_new = nullptr;
 
@@ -179,7 +179,7 @@ ItemInst::ItemInst(const ItemInst& copy)
 		}
 	}
 	std::map<std::string, std::string>::const_iterator iter;
-	for (iter = copy.m_custom_data.begin(); iter != copy.m_custom_data.end(); iter++) {
+	for (iter = copy.m_custom_data.begin(); iter != copy.m_custom_data.end(); ++iter) {
 		m_custom_data[iter->first] = iter->second;
 	}
 	m_SerialNumber = copy.m_SerialNumber;
@@ -220,10 +220,10 @@ ItemInst* ItemInst::Clone() const
 }
 
 // Query item type
-bool ItemInst::IsType(ItemClass item_class) const
+bool ItemInst::IsType(ItemClassTypes item_class) const
 {
 	// Check usage type
-	if ((m_use_type == ItemUseWorldContainer) && (item_class == ItemClassContainer))
+	if ((m_use_type == ItemInstWorldContainer) && (item_class == ItemClassContainer))
 
 		return true;
 	if (!m_item)
@@ -236,6 +236,14 @@ bool ItemInst::IsType(ItemClass item_class) const
 bool ItemInst::IsStackable() const
 {
 	return m_item->Stackable;
+}
+
+bool ItemInst::IsCharged() const
+{
+	if(m_item->MaxCharges > 1)
+		return true;
+	else
+		return false;
 }
 
 // Can item be equipped?
@@ -340,8 +348,8 @@ bool ItemInst::IsAmmo() const {
 	if(!m_item) return false;
 
 	if((m_item->ItemType == ItemTypeArrow) ||
-		(m_item->ItemType == ItemTypeThrowing) ||
-		(m_item->ItemType == ItemTypeThrowingv2))
+		(m_item->ItemType == ItemTypeLargeThrowing) ||
+		(m_item->ItemType == ItemTypeSmallThrowing))
 		return true;
 
 	return false;
@@ -428,7 +436,7 @@ void ItemInst::Clear()
 	iter_contents cur, end;
 	cur = m_contents.begin();
 	end = m_contents.end();
-	for (; cur != end; cur++) {
+	for (; cur != end; ++cur) {
 		ItemInst* inst = cur->second;
 		safe_delete(inst);
 	}
@@ -446,7 +454,7 @@ void ItemInst::ClearByFlags(byFlagSetting is_nodrop, byFlagSetting is_norent)
 		ItemInst* inst = cur->second;
 		const Item_Struct* item = inst->GetItem();
 		del = cur;
-		cur++;
+		++cur;
 
 		switch(is_nodrop) {
 		case byFlagSet:
@@ -531,7 +539,6 @@ ItemInst* ItemInstQueue::peek_front() const
 // Retrieve item at specified slot; returns false if item not found
 ItemInst* Inventory::GetItem(int16 slot_id) const
 {
-	_CP(Inventory_GetItem);
 	ItemInst* result = nullptr;
 
 	// Cursor
@@ -612,7 +619,7 @@ std::string ItemInst::GetCustomDataString() const {
 		ret_val += iter->first;
 		ret_val += "^";
 		ret_val += iter->second;
-		iter++;
+		++iter;
 
 		if(ret_val.length() > 0) {
 			ret_val += "^";
@@ -862,7 +869,6 @@ bool Inventory::SwapItem(int16 slot_a, int16 slot_b)
 
 int16 Inventory::HasItem(uint32 item_id, uint8 quantity, uint8 where)
 {
-	_CP(Inventory_HasItem);
 	int16 slot_id = SLOT_INVALID;
 
 	//Altered by Father Nitwit to support a specification of
@@ -1203,7 +1209,7 @@ int16 Inventory::FindFreeSlot(bool for_bag, bool try_cursor, uint8 min_size, boo
 			if (inst && inst->IsType(ItemClassContainer)
 				&& inst->GetItem()->BagSize >= min_size)
 			{
-				if(inst->GetItem()->BagType == bagTypeQuiver && inst->GetItem()->ItemType != ItemTypeArrow)
+				if(inst->GetItem()->BagType == BagTypeQuiver && inst->GetItem()->ItemType != ItemTypeArrow)
 				{
 					continue;
 				}
@@ -1233,11 +1239,11 @@ int16 Inventory::FindFreeSlot(bool for_bag, bool try_cursor, uint8 min_size, boo
 void Inventory::dumpBagContents(ItemInst *inst, iter_inst *it) {
 	iter_contents itb;
 
-	if (!inst || !inst->IsType(ItemClassContainer)) 
+	if (!inst || !inst->IsType(ItemClassContainer))
 		return;
 
 	// Go through bag, if bag
-	for (itb=inst->_begin(); itb!=inst->_end(); itb++) {
+	for (itb=inst->_begin(); itb!=inst->_end(); ++itb) {
 		ItemInst* baginst = itb->second;
 		if(!baginst || !baginst->GetItem())
 			continue;
@@ -1310,7 +1316,7 @@ void Inventory::dumpItemCollection(const std::map<int16, ItemInst*> &collection)
 	iter_contents itb;
 	ItemInst* inst = nullptr;
 	
-	for (it=collection.begin(); it!=collection.end(); it++) {
+	for (it=collection.begin(); it!=collection.end(); ++it) {
 		inst = it->second;
 		if(!inst || !inst->GetItem())
 			continue;
@@ -1432,7 +1438,7 @@ int16 Inventory::_HasItem(std::map<int16, ItemInst*>& bucket, uint32 item_id, ui
 	uint8 quantity_found = 0;
 
 	// Check item: After failed checks, check bag contents (if bag)
-	for (it=bucket.begin(); it!=bucket.end(); it++) {
+	for (it=bucket.begin(); it!=bucket.end(); ++it) {
 		inst = it->second;
 		if (inst) {
 			if (inst->GetID() == item_id) {
@@ -1449,7 +1455,7 @@ int16 Inventory::_HasItem(std::map<int16, ItemInst*>& bucket, uint32 item_id, ui
 		// Go through bag, if bag
 		if (inst && inst->IsType(ItemClassContainer)) {
 
-			for (itb=inst->_begin(); itb!=inst->_end(); itb++) {
+			for (itb=inst->_begin(); itb!=inst->_end(); ++itb) {
 				ItemInst* baginst = itb->second;
 				if (baginst->GetID() == item_id) {
 					quantity_found += (baginst->GetCharges()<=0) ? 1 : baginst->GetCharges();
@@ -1476,7 +1482,7 @@ int16 Inventory::_HasItem(ItemInstQueue& iqueue, uint32 item_id, uint8 quantity)
 	uint8 quantity_found = 0;
 
 	// Read-only iteration of queue
-	for (it=iqueue.begin(); it!=iqueue.end(); it++) {
+	for (it=iqueue.begin(); it!=iqueue.end(); ++it) {
 		ItemInst* inst = *it;
 		if (inst)
 		{
@@ -1493,7 +1499,7 @@ int16 Inventory::_HasItem(ItemInstQueue& iqueue, uint32 item_id, uint8 quantity)
 		// Go through bag, if bag
 		if (inst && inst->IsType(ItemClassContainer)) {
 
-			for (itb=inst->_begin(); itb!=inst->_end(); itb++) {
+			for (itb=inst->_begin(); itb!=inst->_end(); ++itb) {
 				ItemInst* baginst = itb->second;
 				if (baginst->GetID() == item_id) {
 					quantity_found += (baginst->GetCharges()<=0) ? 1 : baginst->GetCharges();
@@ -1522,7 +1528,7 @@ int16 Inventory::_HasItemByUse(std::map<int16, ItemInst*>& bucket, uint8 use, ui
 	uint8 quantity_found = 0;
 
 	// Check item: After failed checks, check bag contents (if bag)
-	for (it=bucket.begin(); it!=bucket.end(); it++) {
+	for (it=bucket.begin(); it!=bucket.end(); ++it) {
 		inst = it->second;
 		if (inst && inst->IsType(ItemClassCommon) && inst->GetItem()->ItemType == use) {
 			quantity_found += (inst->GetCharges()<=0) ? 1 : inst->GetCharges();
@@ -1556,7 +1562,7 @@ int16 Inventory::_HasItemByUse(ItemInstQueue& iqueue, uint8 use, uint8 quantity)
 	uint8 quantity_found = 0;
 
 	// Read-only iteration of queue
-	for (it=iqueue.begin(); it!=iqueue.end(); it++) {
+	for (it=iqueue.begin(); it!=iqueue.end(); ++it) {
 		ItemInst* inst = *it;
 		if (inst && inst->IsType(ItemClassCommon) && inst->GetItem()->ItemType == use) {
 			quantity_found += (inst->GetCharges()<=0) ? 1 : inst->GetCharges();
@@ -1567,7 +1573,7 @@ int16 Inventory::_HasItemByUse(ItemInstQueue& iqueue, uint8 use, uint8 quantity)
 		// Go through bag, if bag
 		if (inst && inst->IsType(ItemClassContainer)) {
 
-			for (itb=inst->_begin(); itb!=inst->_end(); itb++) {
+			for (itb=inst->_begin(); itb!=inst->_end(); ++itb) {
 				ItemInst* baginst = itb->second;
 				if (baginst && baginst->IsType(ItemClassCommon) && baginst->GetItem()->ItemType == use) {
 					quantity_found += (baginst->GetCharges()<=0) ? 1 : baginst->GetCharges();
@@ -1589,7 +1595,7 @@ int16 Inventory::_HasItemByLoreGroup(std::map<int16, ItemInst*>& bucket, uint32 
 	ItemInst* inst = nullptr;
 
 	// Check item: After failed checks, check bag contents (if bag)
-	for (it=bucket.begin(); it!=bucket.end(); it++) {
+	for (it=bucket.begin(); it!=bucket.end(); ++it) {
 		inst = it->second;
 		if (inst) {
 			if (inst->GetItem()->LoreGroup == loregroup)
@@ -1605,7 +1611,7 @@ int16 Inventory::_HasItemByLoreGroup(std::map<int16, ItemInst*>& bucket, uint32 
 		// Go through bag, if bag
 		if (inst && inst->IsType(ItemClassContainer)) {
 
-			for (itb=inst->_begin(); itb!=inst->_end(); itb++) {
+			for (itb=inst->_begin(); itb!=inst->_end(); ++itb) {
 				ItemInst* baginst = itb->second;
 				if (baginst && baginst->IsType(ItemClassCommon)&& baginst->GetItem()->LoreGroup == loregroup)
 					return Inventory::CalcSlotId(it->first, itb->first);
@@ -1631,7 +1637,7 @@ int16 Inventory::_HasItemByLoreGroup(ItemInstQueue& iqueue, uint32 loregroup)
 	iter_contents itb;
 
 	// Read-only iteration of queue
-	for (it=iqueue.begin(); it!=iqueue.end(); it++) {
+	for (it=iqueue.begin(); it!=iqueue.end(); ++it) {
 		ItemInst* inst = *it;
 		if (inst)
 		{
@@ -1648,7 +1654,7 @@ int16 Inventory::_HasItemByLoreGroup(ItemInstQueue& iqueue, uint32 loregroup)
 		// Go through bag, if bag
 		if (inst && inst->IsType(ItemClassContainer)) {
 
-			for (itb=inst->_begin(); itb!=inst->_end(); itb++) {
+			for (itb=inst->_begin(); itb!=inst->_end(); ++itb) {
 				ItemInst* baginst = itb->second;
 				if (baginst && baginst->IsType(ItemClassCommon)&& baginst->GetItem()->LoreGroup == loregroup)
 					return Inventory::CalcSlotId(SLOT_CURSOR, itb->first);
@@ -1792,26 +1798,26 @@ int16 Inventory::CalcSlotFromMaterial(uint8 material)
 {
 	switch(material)
 	{
-		case MATERIAL_HEAD:
+		case MaterialHead:
 			return SLOT_HEAD;
-		case MATERIAL_CHEST:
+		case MaterialChest:
 			return SLOT_CHEST;
-		case MATERIAL_ARMS:
+		case MaterialArms:
 			return SLOT_ARMS;
-		case MATERIAL_BRACER:
+		case MaterialWrist:
 			return SLOT_BRACER01;	// there's 2 bracers, only one bracer material
-		case MATERIAL_HANDS:
+		case MaterialHands:
 			return SLOT_HANDS;
-		case MATERIAL_LEGS:
+		case MaterialLegs:
 			return SLOT_LEGS;
-		case MATERIAL_FEET:
+		case MaterialFeet:
 			return SLOT_FEET;
-		case MATERIAL_PRIMARY:
+		case MaterialPrimary:
 			return SLOT_PRIMARY;
-		case MATERIAL_SECONDARY:
+		case MaterialSecondary:
 			return SLOT_SECONDARY;
 		default:
-			return -1;
+			return SLOT_INVALID;
 	}
 }
 
@@ -1820,26 +1826,26 @@ uint8 Inventory::CalcMaterialFromSlot(int16 equipslot)
 	switch(equipslot)
 	{
 		case SLOT_HEAD:
-			return MATERIAL_HEAD;
+			return MaterialHead;
 		case SLOT_CHEST:
-			return MATERIAL_CHEST;
+			return MaterialChest;
 		case SLOT_ARMS:
-			return MATERIAL_ARMS;
+			return MaterialArms;
 		case SLOT_BRACER01:
 		case SLOT_BRACER02:
-			return MATERIAL_BRACER;
+			return MaterialWrist;
 		case SLOT_HANDS:
-			return MATERIAL_HANDS;
+			return MaterialHands;
 		case SLOT_LEGS:
-			return MATERIAL_LEGS;
+			return MaterialLegs;
 		case SLOT_FEET:
-			return MATERIAL_FEET;
+			return MaterialFeet;
 		case SLOT_PRIMARY:
-			return MATERIAL_PRIMARY;
+			return MaterialPrimary;
 		case SLOT_SECONDARY:
-			return MATERIAL_SECONDARY;
+			return MaterialSecondary;
 		default:
-			return 0xFF;
+			return _MaterialInvalid;
 	}
 }
 
@@ -1863,9 +1869,9 @@ bool Inventory::CanItemFitInContainer(const Item_Struct *ItemToTry, const Item_S
 
 	if(ItemToTry->Size > Container->BagSize) return false;
 
-	if((Container->BagType == bagTypeQuiver) && (ItemToTry->ItemType != ItemTypeArrow)) return false;
+	if((Container->BagType == BagTypeQuiver) && (ItemToTry->ItemType != ItemTypeArrow)) return false;
 
-	if((Container->BagType == bagTypeBandolier) && (ItemToTry->ItemType != ItemTypeThrowingv2)) return false;
+	if((Container->BagType == BagTypeBandolier) && (ItemToTry->ItemType != ItemTypeSmallThrowing)) return false;
 
 	return true;
 }

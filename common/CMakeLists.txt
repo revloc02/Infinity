@@ -91,10 +91,10 @@ SET(common_sources
 
 SET(common_headers
 	BasePacket.h
+	base_data.h
 	bodytypes.h
 	breakdowns.h
 	classes.h
-	common_profile.h
 	Condition.h
 	crash.h
 	CRC16.h

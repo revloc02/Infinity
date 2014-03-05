@@ -126,7 +126,6 @@ PerlembParser::~PerlembParser() {
 }
 
 void PerlembParser::ReloadQuests() {
-
 	try {
 		if(perl == nullptr) {
 			perl = new Embperl;
@@ -145,6 +144,7 @@ void PerlembParser::ReloadQuests() {
 		throw e.what();
 	}
 
+	errors_.clear();
 	npc_quest_status_.clear();
 	global_npc_quest_status_ = questUnloaded;
 	player_quest_status_ = questUnloaded;
@@ -1304,6 +1304,16 @@ void PerlembParser::ExportEventVariables(std::string &package_name, QuestEventID
 		case EVENT_RESPAWN: {
 			ExportVar(package_name.c_str(), "option", data);
 			ExportVar(package_name.c_str(), "resurrect", extradata);
+			break;
+		}
+
+		case EVENT_DEATH:
+		case EVENT_DEATH_COMPLETE: {
+			Seperator sep(data);
+			ExportVar(package_name.c_str(), "killer_id", sep.arg[0]);
+			ExportVar(package_name.c_str(), "killer_damage", sep.arg[1]);
+			ExportVar(package_name.c_str(), "killer_spell", sep.arg[2]);
+			ExportVar(package_name.c_str(), "killer_skill", sep.arg[3]);
 			break;
 		}
 

@@ -326,7 +326,7 @@ void EQStream::ProcessPacket(EQProtocolPacket *p)
 				break;
 			}
 #endif
-			//cout << "Got OP_SessionRequest" << endl;
+			//std::cout << "Got OP_SessionRequest" << std::endl;
 			init();
 			OutboundQueueClear();
 			SessionRequest *Request=(SessionRequest *)p->pBuffer;
@@ -654,7 +654,7 @@ void EQStream::Write(int eq_fd)
 	int32 threshold=RateThreshold;
 	MRate.unlock();
 	if (BytesWritten > threshold) {
-		//cout << "Over threshold: " << BytesWritten << " > " << threshold << endl;
+		//std::cout << "Over threshold: " << BytesWritten << " > " << threshold << std::endl;
 		return;
 	}
 
@@ -747,7 +747,7 @@ void EQStream::Write(int eq_fd)
 					// Copy it first as it will still live until it is acked
 					p=(*sitr)->Copy();
 					_log(NET__NET_COMBINE, _L "Starting combined packet with seq packet %d of len %d" __L, seq_send, p->size);
-					sitr++;
+					++sitr;
 					NextSequencedSend++;
 				} else if (!p->combine(*sitr)) {
 					// Trying to combine this packet with the base didn't work (too big maybe)
@@ -765,7 +765,7 @@ void EQStream::Write(int eq_fd)
 				} else {
 					// Combine worked
 					_log(NET__NET_COMBINE, _L "Combined seq packet %d of len %d, yeilding %d combined." __L, seq_send, (*sitr)->size, p->size);
-					sitr++;
+					++sitr;
 					NextSequencedSend++;
 				}
 			} else {
@@ -774,7 +774,7 @@ void EQStream::Write(int eq_fd)
 					// Copy it first as it will still live until it is acked
 					p=(*sitr)->Copy();
 					_log(NET__NET_COMBINE, _L "Starting combined packet with seq packet %d of len %d" __L, seq_send, p->size);
-					sitr++;
+					++sitr;
 					NextSequencedSend++;
 				} else if (!p->combine(*sitr)) {
 					// Trying to combine this packet with the base didn't work (too big maybe)
@@ -792,7 +792,7 @@ void EQStream::Write(int eq_fd)
 				} else {
 					// Combine worked
 					_log(NET__NET_COMBINE, _L "Combined seq packet %d of len %d, yeilding %d combined." __L, seq_send, (*sitr)->size, p->size);
-					sitr++;
+					++sitr;
 					NextSequencedSend++;
 				}
 			}
@@ -848,15 +848,15 @@ sockaddr_in address;
 	address.sin_port=remote_port;
 #ifdef NOWAY
 	uint32 ip=address.sin_addr.s_addr;
-	cout << "Sending to: "
+	std::cout << "Sending to: "
 		<< (int)*(unsigned char *)&ip
 		<< "." << (int)*((unsigned char *)&ip+1)
 		<< "." << (int)*((unsigned char *)&ip+2)
 		<< "." << (int)*((unsigned char *)&ip+3)
-		<< "," << (int)ntohs(address.sin_port) << "(" << p->size << ")" << endl;
+		<< "," << (int)ntohs(address.sin_port) << "(" << p->size << ")" << std::endl;
 
 	p->DumpRaw();
-	cout << "-------------" << endl;
+	std::cout << "-------------" << std::endl;
 #endif
 	length=p->serialize(buffer);
 	if (p->opcode!=OP_SessionRequest && p->opcode!=OP_SessionResponse) {
@@ -907,7 +907,7 @@ char temp[15];
 			*((unsigned char *)&ip+2),
 			*((unsigned char *)&ip+3),
 			ntohs(from->sin_port));
-		//cout << timestamp() << "Data from: " << temp << " OpCode 0x" << hex << setw(2) << setfill('0') << (int)p->opcode << dec << endl;
+		//std::cout << timestamp() << "Data from: " << temp << " OpCode 0x" << std::hex << std::setw(2) << std::setfill('0') << (int)p->opcode << std::dec << std::endl;
 		//dump_message(p->pBuffer,p->size,timestamp());
 
 	}
@@ -1047,7 +1047,7 @@ EQApplicationPacket *p=nullptr;
 	MInboundQueue.lock();
 	if (!InboundQueue.empty()) {
 		std::vector<EQRawApplicationPacket *>::iterator itr;
-		for(itr=InboundQueue.begin();itr!=InboundQueue.end();itr++) {
+		for(itr=InboundQueue.begin();itr!=InboundQueue.end();++itr) {
 			p=*itr;
 			delete p;
 		}
@@ -1094,7 +1094,7 @@ EQProtocolPacket *p=nullptr;
 	}
 	if(!SequencedQueue.empty()) {
 		std::deque<EQProtocolPacket *>::iterator itr;
-		for(itr=SequencedQueue.begin();itr!=SequencedQueue.end();itr++) {
+		for(itr=SequencedQueue.begin();itr!=SequencedQueue.end();++itr) {
 			p=*itr;
 			delete p;
 		}
@@ -1119,7 +1119,7 @@ EQProtocolPacket *p=nullptr;
 
 	if(!PacketQueue.empty()) {
 		std::map<unsigned short,EQProtocolPacket *>::iterator itr;
-		for(itr=PacketQueue.begin();itr!=PacketQueue.end();itr++) {
+		for(itr=PacketQueue.begin();itr!=PacketQueue.end();++itr) {
 			p=itr->second;
 			delete p;
 		}

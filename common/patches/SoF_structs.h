@@ -382,7 +382,11 @@ struct NewZone_Struct {
 /*0500*/	float	fog_maxclip[4];
 /*0516*/	float	gravity;
 /*0520*/	uint8	time_type;
-/*0521*/	uint8	unknown521[49];
+/*0521*/    uint8   rain_chance[4];
+/*0525*/    uint8   rain_duration[4];
+/*0529*/    uint8   snow_chance[4];
+/*0533*/    uint8   snow_duration[4];
+/*0537*/    uint8   unknown537[33];
 /*0570*/	uint8	sky;					// Sky Type
 /*0571*/	uint8	unknown571[13];			// ***Placeholder
 /*0584*/	float	zone_exp_multiplier;	// Experience Multiplier
@@ -718,7 +722,7 @@ struct BindStruct {
 static const uint32 MAX_PP_LANGUAGE		= 25; //
 static const uint32 MAX_PP_SPELLBOOK	= 480; // Confirmed 60 pages on Live now
 static const uint32 MAX_PP_MEMSPELL		= 10; //was 9 now 10 on Live
-static const uint32 MAX_PP_SKILL		= 75;
+static const uint32 MAX_PP_SKILL		= _SkillPacketArraySize;	// 100 - actual skills buffer size
 static const uint32 MAX_PP_AA_ARRAY		= 300; //was 299
 static const uint32 MAX_GROUP_MEMBERS	= 6;
 static const uint32 MAX_RECAST_TYPES	= 20;
@@ -837,8 +841,8 @@ struct PlayerProfile_Struct //23576 Octets
 /*06484*/ uint32  gold_cursor;			// Gold Pieces on cursor
 /*06488*/ uint32  silver_cursor;		// Silver Pieces on cursor
 /*06492*/ uint32  copper_cursor;		// Copper Pieces on cursor
-/*06496*/ uint32  skills[MAX_PP_SKILL];	// [300] List of skills
-/*06796*/ uint8 unknown04760[236];
+/*06496*/ uint32  skills[MAX_PP_SKILL];	// [400] List of skills // 100 dword buffer
+/*06896*/ uint8 unknown04760[136];
 /*07032*/ uint32  toxicity;				// Potion Toxicity (15=too toxic, each potion adds 3)
 /*07036*/ uint32  thirst_level;			// Drink (ticks till next drink)
 /*07040*/ uint32  hunger_level;			// Food (ticks till next eat)
@@ -3095,7 +3099,7 @@ struct MobRename_Struct {
 };
 
 struct PlayMP3_Struct {
-	char filename[128];
+	char filename[0];
 };
 
 //this is for custom title display in the skill window

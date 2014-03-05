@@ -225,7 +225,8 @@ void Mob::MakePet(uint16 spell_id, const char* pettype, const char *petname) {
 // making it possible for petpower to be retained without the focus item having to
 // stay equipped when the character zones. petpower of -1 means that the currently equipped petfocus
 // of a client is searched for and used instead.
-void Mob::MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower, const char *petname) {
+void Mob::MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower,
+		const char *petname, float in_size) {
 	// Sanity and early out checking first.
 	if(HasPet() || pettype == nullptr)
 		return;
@@ -422,6 +423,9 @@ void Mob::MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower, c
 			}
 	}
 
+	// finally, override size if one was provided
+	if (in_size > 0.0f)
+		npc->size = in_size;
 
 	entity_list.AddNPC(npc, true, true);
 	SetPetID(npc->GetID());
@@ -601,9 +605,9 @@ void NPC::SetPetState(SpellBuff_Struct *pet_buffs, uint32 *items) {
 						// We need to reapply buff based procs
 						// We need to do this here so suspended pets also regain their procs.
 						if (spells[buffs[j1].spellid].base2[x1] == 0) {
-							AddProcToWeapon(GetProcID(buffs[j1].spellid,x1), false, 100);
+							AddProcToWeapon(GetProcID(buffs[j1].spellid,x1), false, 100, buffs[j1].spellid);
 						} else {
-							AddProcToWeapon(GetProcID(buffs[j1].spellid,x1), false, 100+spells[buffs[j1].spellid].base2[x1]);
+							AddProcToWeapon(GetProcID(buffs[j1].spellid,x1), false, 100+spells[buffs[j1].spellid].base2[x1], buffs[j1].spellid);
 						}
 						break;
 					case SE_Charm:

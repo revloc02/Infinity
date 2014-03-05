@@ -65,7 +65,7 @@ public:
 		vitr cur, end;
 		cur = m_list.begin();
 		end = m_list.end();
-		for(; cur != end; cur++) {
+		for(; cur != end; ++cur) {
 			delete *cur;
 		}
 	}
@@ -91,14 +91,14 @@ protected:
 			T *data = *cur;
 			if (data->IsFree() && (!data->CheckNetActive())) {
 				#if EQN_DEBUG >= 4
-					cout << "TCPConnection Connection deleted." << endl;
+					std::cout << "TCPConnection Connection deleted." << std::endl;
 				#endif
 				delete data;
 				cur = m_list.erase(cur);
 			} else {
 				if (!data->Process())
 					data->Disconnect();
-				cur++;
+				++cur;
 			}
 		}
 	}

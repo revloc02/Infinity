@@ -29,6 +29,7 @@
 #include "QuestParserCollection.h"
 #include <math.h>
 #include <assert.h>
+#include <iostream>
 #ifndef WIN32
 #include <stdlib.h>
 #include "../common/unix.h"
@@ -68,7 +69,6 @@ void NPC::CalcBonuses()
 
 void Client::CalcBonuses()
 {
-	_ZP(Client_CalcBonuses);
 	memset(&itembonuses, 0, sizeof(StatBonuses));
 	CalcItemBonuses(&itembonuses);
 	CalcEdibleBonuses(&itembonuses);
@@ -135,6 +135,7 @@ void Client::CalcItemBonuses(StatBonuses* newbon) {
 
 	// Clear item faction mods
 	ClearItemFactionBonuses();
+	ShieldEquiped(false);
 
 	unsigned int i;
 	//should not include 21 (SLOT_AMMO)
@@ -143,6 +144,10 @@ void Client::CalcItemBonuses(StatBonuses* newbon) {
 		if(inst == 0)
 			continue;
 		AddItemBonuses(inst, newbon);
+
+		//Check if item is secondary slot is a 'shield'. Required for multiple spelll effects.
+		if (i == 14 && (m_inv.GetItem(14)->GetItem()->ItemType == ItemTypeShield))
+			ShieldEquiped(true);
 	}
 
 	//Power Source Slot
@@ -532,7 +537,7 @@ void Client::AddItemBonuses(const ItemInst *inst, StatBonuses* newbon, bool isAu
 
 void Client::CalcEdibleBonuses(StatBonuses* newbon) {
 #if EQDEBUG >= 11
-	cout<<"Client::CalcEdibleBonuses(StatBonuses* newbon)"<<endl;
+	std::cout<<"Client::CalcEdibleBonuses(StatBonuses* newbon)"<<std::endl;
 #endif
 	// Search player slots for skill=14(food) and skill=15(drink)
 		uint32 i;
@@ -580,15 +585,17 @@ void Client::CalcAABonuses(StatBonuses* newbon) {
 	uint32 slots = 0;
 	uint32 aa_AA = 0;
 	uint32 aa_value = 0;
-	for (i = 0; i < MAX_PP_AA_ARRAY; i++) {	//iterate through all of the client's AAs
-		if (this->aa[i]) {	// make sure aa exists or we'll crash zone
-			aa_AA = this->aa[i]->AA;	//same as aaid from the aa_effects table
-			aa_value = this->aa[i]->value;	//how many points in it
-			if (aa_AA > 0 || aa_value > 0) {	//do we have the AA? if 1 of the 2 is set, we can assume we do
-				//slots = database.GetTotalAALevels(aa_AA);	//find out how many effects from aa_effects table
-				slots = zone->GetTotalAALevels(aa_AA);	//find out how many effects from aa_effects, which is loaded into memory
-				if (slots > 0)	//and does it have any effects? may be able to put this above, not sure if it runs on each iteration
-					ApplyAABonuses(aa_AA, slots, newbon);	//add the bonuses
+	if(this->aa) {
+		for (i = 0; i < MAX_PP_AA_ARRAY; i++) {	//iterate through all of the client's AAs
+			if (this->aa[i]) {	// make sure aa exists or we'll crash zone
+				aa_AA = this->aa[i]->AA;	//same as aaid from the aa_effects table
+				aa_value = this->aa[i]->value;	//how many points in it
+				if (aa_AA > 0 || aa_value > 0) {	//do we have the AA? if 1 of the 2 is set, we can assume we do
+					//slots = database.GetTotalAALevels(aa_AA);	//find out how many effects from aa_effects table
+					slots = zone->GetTotalAALevels(aa_AA);	//find out how many effects from aa_effects, which is loaded into memory
+					if (slots > 0)	//and does it have any effects? may be able to put this above, not sure if it runs on each iteration
+						ApplyAABonuses(aa_AA, slots, newbon);	//add the bonuses
+				}
 			}
 		}
 	}
@@ -844,6 +851,9 @@ void Client::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 			case SE_ArcheryDamageModifier:
 				newbon->ArcheryDamageModifier += base1;
 				break;
+			case SE_DoubleRangedAttack:
+				newbon->DoubleRangedAttack += base1;
+				break;
 			case SE_DamageShield:
 				newbon->DamageShield += base1;
 				break;
@@ -874,6 +884,29 @@ void Client::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 			case SE_CombatStability:
 				newbon->CombatStability += base1;
 				break;
+			case SE_AddSingingMod:
+				switch (base2)
+				{
+					case ItemTypeWindInstrument:
+						newbon->windMod += base1;
+						break;
+					case ItemTypeStringedInstrument:
+						newbon->stringedMod += base1;
+						break;
+					case ItemTypeBrassInstrument:
+						newbon->brassMod += base1;
+						break;
+					case ItemTypePercussionInstrument:
+						newbon->percussionMod += base1;
+						break;
+					case ItemTypeSinging:
+						newbon->singingMod += base1;
+						break;
+				}
+				break;
+			case SE_SongModCap:
+				newbon->songModCap += base1;
+				break;
 			case SE_PetCriticalHit:
 				newbon->PetCriticalHit += base1;
 				break;
@@ -882,6 +915,13 @@ void Client::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 				break;
 			case SE_ShieldBlock:
 				newbon->ShieldBlock += base1;
+				break;
+			case SE_ShieldEquipHateMod:
+				newbon->ShieldEquipHateMod += base1;
+				break;
+			case SE_ShieldEquipDmgMod:
+				newbon->ShieldEquipDmgMod[0] += base1;
+				newbon->ShieldEquipDmgMod[1] += base2;
 				break;
 			case SE_SecondaryDmgInc:
 				newbon->SecondaryDmgInc = true;
@@ -923,7 +963,7 @@ void Client::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 				newbon->GiveDoubleAttack += base1;
 				break;
 			case SE_ProcChance:
-				newbon->ProcChance += base1;
+				newbon->ProcChanceSPA += base1;
 				break;
 			case SE_RiposteChance:
 				newbon->RiposteChance += base1;
@@ -1018,8 +1058,8 @@ void Client::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 			{
 				newbon->CriticalSpellChance += base1;
 
-				if (base2 > 100)
-					newbon->SpellCritDmgIncrease += (base2 - 100);
+				if (base2 > newbon->SpellCritDmgIncNoStack)
+					newbon->SpellCritDmgIncNoStack = base2;
 
 				break;
 			}
@@ -1108,7 +1148,6 @@ void Client::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 				break;
 			}
 
-
 			case SE_DivineSave:
 			{
 				if(newbon->DivineSaveChance[0] < base1)
@@ -1161,6 +1200,42 @@ void Client::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 				}
 				break;
 			}
+
+			case SE_StunBashChance:
+				newbon->StunBashChance += base1;
+				break;
+
+			case SE_IncreaseChanceMemwipe:
+				newbon->IncreaseChanceMemwipe += base1;
+				break;
+
+			case SE_CriticalMend:
+				newbon->CriticalMend += base1;
+				break;
+
+			case SE_HealRate:
+				newbon->HealRate += base1;
+				break;
+
+			case SE_MeleeLifetap:
+			{
+
+				if((base1 < 0) && (newbon->MeleeLifetap > base1))
+					newbon->MeleeLifetap = base1;
+
+				else if(newbon->MeleeLifetap < base1)
+					newbon->MeleeLifetap = base1;
+				break;
+			}
+
+			case SE_FrenziedDevastation:
+				newbon->FrenziedDevastation += base2;
+				break;
+
+			case SE_SpellProcChance:
+				newbon->SpellProcChance += base1;
+				break;
+
 		}
 	}
 }
@@ -1175,8 +1250,12 @@ void Mob::CalcSpellBonuses(StatBonuses* newbon)
 
 	uint32 buff_count = GetMaxTotalSlots();
 	for(i = 0; i < buff_count; i++) {
-		if(buffs[i].spellid != SPELL_UNKNOWN)
+		if(buffs[i].spellid != SPELL_UNKNOWN){
 			ApplySpellsBonuses(buffs[i].spellid, buffs[i].casterlevel, newbon, buffs[i].casterid, false, buffs[i].ticsremaining,i);
+
+			if (buffs[i].numhits > 0)
+				Numhits(true);
+		}
 	}
 
 	//Removes the spell bonuses that are effected by a 'negate' debuff.
@@ -1188,6 +1267,7 @@ void Mob::CalcSpellBonuses(StatBonuses* newbon)
 	}
 	//this prolly suffer from roundoff error slightly...
 	newbon->AC = newbon->AC * 10 / 34;	//ratio determined impirically from client.
+	if (GetClass() == BARD) newbon->ManaRegen = 0; // Bards do not get mana regen from spells.
 }
 
 void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* newbon, uint16 casterId, bool item_bonus, uint32 ticsremaining, int buffslot)
@@ -1535,12 +1615,9 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				newbon->reflect_chance += effect_value;
 				break;
 
-			case SE_SingingSkill:
-			{
-				if(effect_value > newbon->singingMod)
-					newbon->singingMod = effect_value;
+			case SE_Amplification:
+				newbon->Amplification += effect_value;
 				break;
-			}
 
 			case SE_ChangeAggro:
 				newbon->hatemod += effect_value;
@@ -1694,7 +1771,7 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				else if((effect_value < 0) && (newbon->MeleeLifetap > effect_value))
 					newbon->MeleeLifetap = spells[spell_id].base[i];
 
-				if(newbon->MeleeLifetap < spells[spell_id].base[i])
+				else if(newbon->MeleeLifetap < spells[spell_id].base[i])
 					newbon->MeleeLifetap = spells[spell_id].base[i];
 				break;
 			}
@@ -1813,17 +1890,14 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 
 			case SE_ProcChance:
 			{
-				//multiplier is to be compatible with item effects,watching for overflow too
-				effect_value = effect_value<3000? effect_value : 3000;
-
 				if (RuleB(Spells, AdditiveBonusValues) && item_bonus)
-					newbon->ProcChance += effect_value;
+					newbon->ProcChanceSPA += effect_value;
 
-				else if((effect_value < 0) && (newbon->DoubleAttackChance > effect_value))
-					newbon->ProcChance = effect_value;
+				else if((effect_value < 0) && (newbon->ProcChanceSPA > effect_value))
+					newbon->ProcChanceSPA = effect_value;
 
-				if(newbon->ProcChance < effect_value)
-					newbon->ProcChance = effect_value;
+				if(newbon->ProcChanceSPA < effect_value)
+					newbon->ProcChanceSPA = effect_value;
 
 				break;
 			}
@@ -1924,8 +1998,9 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 			case SE_CriticalSpellChance:
 			{
 				newbon->CriticalSpellChance += effect_value;
-				if (spells[spell_id].base2[i] > 100)
-					newbon->SpellCritDmgIncrease += (spells[spell_id].base2[i] - 100);
+				
+				if (spells[spell_id].base2[i] > newbon->SpellCritDmgIncNoStack)
+					newbon->SpellCritDmgIncNoStack = spells[spell_id].base2[i];
 				break;
 			}
 
@@ -1937,14 +2012,24 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				newbon->DotCritDmgIncrease += effect_value;
 				break;
 
-			case SE_CriticalHealChance2:
 			case SE_CriticalHealChance:
 				newbon->CriticalHealChance += effect_value;
 				break;
 
-			case SE_CriticalHealOverTime2:
 			case SE_CriticalHealOverTime:
 				newbon->CriticalHealOverTime += effect_value;
+				break;
+
+			case SE_CriticalHealDecay:
+				newbon->CriticalHealDecay = true;
+				break;
+
+			case SE_CriticalRegenDecay:
+				newbon->CriticalRegenDecay = true;
+				break;
+
+			case SE_CriticalDotDecay:
+				newbon->CriticalDotDecay = true;
 				break;
 
 			case SE_MitigateDamageShield:
@@ -2127,6 +2212,27 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				break;
 			}
 
+			
+			case SE_MeleeThresholdGuard:
+			{
+				if (newbon->MeleeThresholdGuard[0] < effect_value){
+					newbon->MeleeThresholdGuard[0] = effect_value;
+					newbon->MeleeThresholdGuard[1] = buffslot;
+					newbon->MeleeThresholdGuard[2] = spells[spell_id].base2[i];
+				}
+				break;
+			}
+
+			case SE_SpellThresholdGuard:
+			{
+				if (newbon->SpellThresholdGuard[0] < effect_value){
+					newbon->SpellThresholdGuard[0] = effect_value;
+					newbon->SpellThresholdGuard[1] = buffslot;
+					newbon->SpellThresholdGuard[2] = spells[spell_id].base2[i];
+				}
+				break;
+			}
+
 			case SE_MitigateSpellDamage:
 			{
 				if (newbon->MitigateSpellRune[0] < effect_value){
@@ -2136,6 +2242,15 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				break;
 			}
 
+			case SE_MitigateDotDamage:
+			{
+				if (newbon->MitigateDotRune[0] < effect_value){
+					newbon->MitigateDotRune[0] = effect_value;
+					newbon->MitigateDotRune[1] = buffslot;
+				}
+				break;
+			}
+			
 			case SE_ManaAbsorbPercentDamage:
 			{
 				if (newbon->ManaAbsorbPercentDamage[0] < effect_value){
@@ -2145,8 +2260,37 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				break;
 			}
 
+			case SE_TriggerMeleeThreshold:
+			{
+				if (newbon->TriggerMeleeThreshold[2] < spells[spell_id].base2[i]){
+					newbon->TriggerMeleeThreshold[0] = effect_value;
+					newbon->TriggerMeleeThreshold[1] = buffslot;
+					newbon->TriggerMeleeThreshold[2] = spells[spell_id].base2[i];
+				}
+				break;
+			}
+
+			case SE_TriggerSpellThreshold:
+			{
+				if (newbon->TriggerSpellThreshold[2] < spells[spell_id].base2[i]){
+					newbon->TriggerSpellThreshold[0] = effect_value;
+					newbon->TriggerSpellThreshold[1] = buffslot;
+					newbon->TriggerSpellThreshold[2] = spells[spell_id].base2[i];
+				}
+				break;
+			}
+
 			case SE_ShieldBlock:
 				newbon->ShieldBlock += effect_value;
+				break;
+			
+			case SE_ShieldEquipHateMod:
+				newbon->ShieldEquipHateMod += effect_value;
+				break;
+
+			case SE_ShieldEquipDmgMod:
+				newbon->ShieldEquipDmgMod[0] += effect_value;
+				newbon->ShieldEquipDmgMod[1] += spells[spell_id].base2[i];
 				break;
 
 			case SE_BlockBehind:
@@ -2210,6 +2354,10 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				newbon->ArcheryDamageModifier += effect_value;
 				break;
 
+			case SE_DoubleRangedAttack:
+				newbon->DoubleRangedAttack += effect_value;
+				break;
+
 			case SE_SecondaryDmgInc:
 				newbon->SecondaryDmgInc = true;
 				break;
@@ -2228,6 +2376,31 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 
 			case SE_CombatStability:
 				newbon->CombatStability += effect_value;
+				break;
+
+			case SE_AddSingingMod:
+				switch (spells[spell_id].base2[i])
+				{
+					case ItemTypeWindInstrument:
+						newbon->windMod += effect_value;
+						break;
+					case ItemTypeStringedInstrument:
+						newbon->stringedMod += effect_value;
+						break;
+					case ItemTypeBrassInstrument:
+						newbon->brassMod += effect_value;
+						break;
+					case ItemTypePercussionInstrument:
+						newbon->percussionMod += effect_value;
+						break;
+					case ItemTypeSinging:
+						newbon->singingMod += effect_value;
+						break;
+				}
+				break;
+
+			case SE_SongModCap:
+				newbon->songModCap += effect_value;
 				break;
 
 			case SE_PetAvoidance:
@@ -2283,6 +2456,18 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				newbon->TwoHandBluntBlock += effect_value;
 				break;
 
+			case SE_StunBashChance:
+				newbon->StunBashChance += effect_value;
+				break;
+
+			case SE_IncreaseChanceMemwipe:
+				newbon->IncreaseChanceMemwipe += effect_value;
+				break;
+
+			case SE_CriticalMend:
+				newbon->CriticalMend += effect_value;
+				break;
+
 			case SE_SpellEffectResistChance:
 			{
 				for(int e = 0; e < MAX_RESISTABLE_EFFECTS*2; e+=2)
@@ -2322,6 +2507,31 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses* ne
 				break;
 			}
 
+			case SE_TriggerOnReqTarget:
+			case SE_TriggerOnReqCaster:
+				newbon->TriggerOnValueAmount = true;
+				break;
+
+			case SE_DivineAura:
+				newbon->DivineAura = true;
+				break;
+
+			case SE_ImprovedTaunt:
+				if (newbon->ImprovedTaunt[0] < effect_value) {
+					newbon->ImprovedTaunt[0] = effect_value;
+					newbon->ImprovedTaunt[1] = spells[spell_id].base2[i];
+					newbon->ImprovedTaunt[2] = buffslot;
+				}
+				break;
+
+
+			case SE_DistanceRemoval:
+				newbon->DistanceRemoval = true;
+				break;
+
+			case SE_FrenziedDevastation:
+				newbon->FrenziedDevastation += spells[spell_id].base2[i];
+				break;
 
 		}
 	}
@@ -2608,34 +2818,45 @@ uint8 Mob::IsFocusEffect(uint16 spell_id,int effect_index, bool AA,uint32 aa_eff
 		case SE_TriggerOnCast:
 			//return focusTriggerOnCast;
 			return 0; //This is calculated as an actual bonus
-		case SE_SpellVulnerability:
+		case SE_FcSpellVulnerability:
 			return focusSpellVulnerability;
 		case SE_BlockNextSpellFocus:
-			return focusBlockNextSpell;
-		case SE_Twincast:
+			//return focusBlockNextSpell;
+			return 0; //This is calculated as an actual bonus
+		case SE_FcTwincast:
 			return focusTwincast;
 		case SE_SympatheticProc:
 			return focusSympatheticProc;
-		case SE_SpellDamage:
-			return focusSpellDamage;
-		case SE_FF_Damage_Amount:
-			return focusFF_Damage_Amount;
-		case SE_ImprovedDamage2:
-			return focusImprovedDamage2;
-		case SE_Empathy:
-			return focusAdditionalDamage;
-		case SE_HealRate2:
-			return focusHealRate;
-		case SE_IncreaseSpellPower:
-			return focusSpellEffectiveness;
-		case SE_IncreaseNumHits:
+		case SE_FcDamageAmt:
+			return focusFcDamageAmt;
+		case SE_FcDamageAmtCrit:
+			return focusFcDamageAmtCrit;
+		case SE_FcDamagePctCrit:
+			return focusFcDamagePctCrit;
+		case SE_FcDamageAmtIncoming:
+			return focusFcDamageAmtIncoming;
+		case SE_FcHealAmtIncoming:
+			return focusFcHealAmtIncoming;
+		case SE_FcHealPctIncoming:
+			return focusFcHealPctIncoming;
+		case SE_FcBaseEffects:
+			return focusFcBaseEffects;
+		case SE_FcIncreaseNumHits:
 			return focusIncreaseNumHits;
-		case SE_CriticalHealRate:
-			return focusCriticalHealRate;
-		case SE_AdditionalHeal2:
-			return focusAdditionalHeal2;
-		case SE_AdditionalHeal:
-			return focusAdditionalHeal;
+		case SE_FcLimitUse:
+			return focusFcLimitUse;
+		case SE_FcMute:
+			return focusFcMute;
+		case SE_FcTimerRefresh:
+			return focusFcTimerRefresh;
+		case SE_FcStunTimeMod:
+			return focusFcStunTimeMod;
+		case SE_FcHealPctCritIncoming:
+			return focusFcHealPctCritIncoming;
+		case  SE_FcHealAmt:
+			return focusFcHealAmt;
+		case SE_FcHealAmtCrit:
+			return focusFcHealAmtCrit;
 	}
 	return 0;
 }
@@ -2923,10 +3144,10 @@ void Mob::NegateSpellsBonuses(uint16 spell_id)
 					itembonuses.reflect_chance = effect_value;
 					break;
 
-				case SE_SingingSkill:
-					spellbonuses.singingMod = effect_value;
-					itembonuses.singingMod = effect_value;
-					aabonuses.singingMod = effect_value;
+				case SE_Amplification:
+					spellbonuses.Amplification = effect_value;
+					itembonuses.Amplification = effect_value;
+					aabonuses.Amplification = effect_value;
 					break;
 
 				case SE_ChangeAggro:
@@ -3099,9 +3320,9 @@ void Mob::NegateSpellsBonuses(uint16 spell_id)
 					break;
 
 				case SE_ProcChance:
-					spellbonuses.ProcChance = effect_value;
-					aabonuses.ProcChance = effect_value;
-					itembonuses.ProcChance = effect_value;
+					spellbonuses.ProcChanceSPA = effect_value;
+					aabonuses.ProcChanceSPA = effect_value;
+					itembonuses.ProcChanceSPA = effect_value;
 					break;
 
 				case SE_ExtraAttackChance:
@@ -3202,14 +3423,12 @@ void Mob::NegateSpellsBonuses(uint16 spell_id)
 					itembonuses.DotCritDmgIncrease = effect_value;
 					break;
 
-				case SE_CriticalHealChance2:
 				case SE_CriticalHealChance:
 					spellbonuses.CriticalHealChance = effect_value;
 					aabonuses.CriticalHealChance = effect_value;
 					itembonuses.CriticalHealChance = effect_value;
 					break;
 
-				case SE_CriticalHealOverTime2:
 				case SE_CriticalHealOverTime:
 					spellbonuses.CriticalHealOverTime = effect_value;
 					aabonuses.CriticalHealOverTime = effect_value;
@@ -3342,9 +3561,26 @@ void Mob::NegateSpellsBonuses(uint16 spell_id)
 					spellbonuses.MitigateMeleeRune[1] = -1;
 					break;
 
+				case SE_MeleeThresholdGuard:
+					spellbonuses.MeleeThresholdGuard[0] = effect_value;
+					spellbonuses.MeleeThresholdGuard[1] = -1;
+					spellbonuses.MeleeThresholdGuard[1] = effect_value;
+					break;
+
+				case SE_SpellThresholdGuard:
+					spellbonuses.SpellThresholdGuard[0] = effect_value;
+					spellbonuses.SpellThresholdGuard[1] = -1;
+					spellbonuses.SpellThresholdGuard[1] = effect_value;
+					break;
+
 				case SE_MitigateSpellDamage:
 					spellbonuses.MitigateSpellRune[0] = effect_value;
 					spellbonuses.MitigateSpellRune[1] = -1;
+					break;
+
+				case SE_MitigateDotDamage:
+					spellbonuses.MitigateDotRune[0] = effect_value;
+					spellbonuses.MitigateDotRune[1] = -1;
 					break;
 
 				case SE_ManaAbsorbPercentDamage:
@@ -3575,7 +3811,77 @@ void Mob::NegateSpellsBonuses(uint16 spell_id)
 					aabonuses.SlayUndead[0] = effect_value;
 					aabonuses.SlayUndead[1] = effect_value;
 					break;
+			
+				case SE_DoubleRangedAttack:
+					spellbonuses.DoubleRangedAttack = effect_value;
+					aabonuses.DoubleRangedAttack = effect_value;
+					itembonuses.DoubleRangedAttack = effect_value;
+					break;
 
+				case SE_ShieldEquipHateMod:
+					spellbonuses.ShieldEquipHateMod = effect_value;
+					aabonuses.ShieldEquipHateMod = effect_value;
+					itembonuses.ShieldEquipHateMod = effect_value;
+					break;
+
+				case SE_ShieldEquipDmgMod:
+					spellbonuses.ShieldEquipDmgMod[0] = effect_value;
+					spellbonuses.ShieldEquipDmgMod[1] = effect_value;
+					aabonuses.ShieldEquipDmgMod[0] = effect_value;
+					aabonuses.ShieldEquipDmgMod[1] = effect_value;
+					itembonuses.ShieldEquipDmgMod[0] = effect_value;
+					itembonuses.ShieldEquipDmgMod[1] = effect_value;
+					break; 
+
+				case SE_TriggerMeleeThreshold:
+					spellbonuses.TriggerMeleeThreshold[0] = effect_value;
+					spellbonuses.TriggerMeleeThreshold[1] = effect_value;
+					spellbonuses.TriggerMeleeThreshold[2] = effect_value;
+					break;
+
+				case SE_TriggerSpellThreshold:
+					spellbonuses.TriggerSpellThreshold[0] = effect_value;
+					spellbonuses.TriggerSpellThreshold[1] = effect_value;
+					spellbonuses.TriggerSpellThreshold[2] = effect_value;
+					break;
+
+				case SE_DivineAura:
+					spellbonuses.DivineAura = false;
+					break;
+
+				case SE_StunBashChance:
+					spellbonuses.StunBashChance = effect_value;
+					itembonuses.StunBashChance = effect_value;
+					aabonuses.StunBashChance = effect_value;
+					break;
+
+				case SE_IncreaseChanceMemwipe:
+					spellbonuses.IncreaseChanceMemwipe = effect_value;
+					itembonuses.IncreaseChanceMemwipe = effect_value;
+					aabonuses.IncreaseChanceMemwipe = effect_value;
+					break;
+
+				case SE_CriticalMend:
+					spellbonuses.CriticalMend = effect_value;
+					itembonuses.CriticalMend = effect_value;
+					aabonuses.CriticalMend = effect_value;
+					break;
+
+				case SE_DistanceRemoval:
+					spellbonuses.DistanceRemoval = effect_value;
+					break;
+
+				case SE_ImprovedTaunt:
+					spellbonuses.ImprovedTaunt[0] = effect_value;
+					spellbonuses.ImprovedTaunt[1] = effect_value;
+					spellbonuses.ImprovedTaunt[2] = -1;
+					break;
+
+				case SE_FrenziedDevastation:
+					spellbonuses.FrenziedDevastation += effect_value;
+					aabonuses.FrenziedDevastation += effect_value;
+					itembonuses.FrenziedDevastation += effect_value;
+					break;
 			}
 		}
 	}

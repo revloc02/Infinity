@@ -112,7 +112,6 @@ SET(zone_sources
 	worldserver.cpp
 	zone.cpp
 	zone_logsys.cpp
-	zone_profile.cpp
 	ZoneConfig.cpp
 	zonedb.cpp
 	zonedbasync.cpp
@@ -195,12 +194,15 @@ SET(zone_headers
 	watermap.h
 	worldserver.h
 	zone.h
-	zone_profile.h
 	ZoneConfig.h
 	zonedb.h
 	zonedbasync.h
 	zonedump.h
 )
+
+IF(EQEMU_DEPOP_INVALIDATES_CACHE)
+	ADD_DEFINITIONS(-DDEPOP_INVALIDATES_NPC_TYPES_CACHE)
+ENDIF(EQEMU_DEPOP_INVALIDATES_CACHE)
 
 ADD_EXECUTABLE(zone ${zone_sources} ${zone_headers})
 
@@ -225,16 +227,12 @@ IF(MINGW)
 ENDIF(MINGW)
 
 IF(UNIX)
-	IF(NOT FREEBSD)
-		TARGET_LINK_LIBRARIES(zone "dl")
-	ENDIF(NOT FREEBSD)
+	TARGET_LINK_LIBRARIES(zone "${CMAKE_DL_LIBS}")
 	TARGET_LINK_LIBRARIES(zone "z")
 	TARGET_LINK_LIBRARIES(zone "m")
 	TARGET_LINK_LIBRARIES(zone "rt")
 	TARGET_LINK_LIBRARIES(zone "pthread")
 	ADD_DEFINITIONS(-fPIC)
 ENDIF(UNIX)
-
-INCLUDE_DIRECTORIES(${VLD_INCLUDE_DIR})
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/Bin)

@@ -334,7 +334,7 @@ ENCODE(OP_SendCharInfo) {
 			eq2->haircolor = emu->haircolor[r];
 			eq2->face = emu->face[r];
 			int k;
-			for(k = 0; k < MAX_MATERIALS; k++) {
+			for(k = 0; k < _MaterialCount; k++) {
 				eq2->equip[k].equip0 = emu->equip[r][k];
 				eq2->equip[k].equip1 = 0;
 				eq2->equip[k].itemid = 0;
@@ -534,7 +534,9 @@ ENCODE(OP_PlayerProfile) {
 	OUT(gold_cursor);
 	OUT(silver_cursor);
 	OUT(copper_cursor);
-	OUT_array(skills, structs::MAX_PP_SKILL);
+
+	OUT_array(skills, structs::MAX_PP_SKILL);	// 1:1 direct copy (100 dword)
+
 //	OUT(unknown04760[236]);
 	OUT(toxicity);
 	OUT(thirst_level);
@@ -706,8 +708,20 @@ ENCODE(OP_NewZone) {
 	}
 	OUT(gravity);
 	OUT(time_type);
-	for(r = 16; r < 48; r++) {
-		eq->unknown521[r] = 0xFF;	//observed
+	for(r = 0; r < 4; r++) {
+		OUT(rain_chance[r]);
+	}
+	for(r = 0; r < 4; r++) {
+		OUT(rain_duration[r]);
+	}
+	for(r = 0; r < 4; r++) {
+		OUT(snow_chance[r]);
+	}
+	for(r = 0; r < 4; r++) {
+		OUT(snow_duration[r]);
+	}
+	for(r = 0; r < 32; r++) {
+		eq->unknown537[r] = 0xFF;	//observed
 	}
 	OUT(sky);
 	OUT(zone_exp_multiplier);

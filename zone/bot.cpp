@@ -66,6 +66,7 @@ Bot::Bot(NPCType npcTypeData, Client* botOwner) : NPC(&npcTypeData, 0, 0, 0, 0, 
 	SetHealRotationNextHealTime(0);
 	SetHealRotationTimer(0);
 	SetNumHealRotationMembers(0);
+	SetBardUseOutOfCombatSongs(GetClass() == BARD);
 	CalcChanceToCast();
 	rest_timer.Disable();
 
@@ -1250,19 +1251,19 @@ void Bot::GenerateArmorClass()
 {
 	/// new formula
 	int avoidance = 0;
-	avoidance = (acmod() + ((GetSkill(DEFENSE)*16)/9));
+	avoidance = (acmod() + ((GetSkill(SkillDefense)*16)/9));
 	if(avoidance < 0)
 		avoidance = 0;
 
 	int mitigation = 0;
 	if(GetClass() == WIZARD || GetClass() == MAGICIAN || GetClass() == NECROMANCER || GetClass() == ENCHANTER)
 	{
-		mitigation = GetSkill(DEFENSE)/4 + (itembonuses.AC+1);
+		mitigation = GetSkill(SkillDefense)/4 + (itembonuses.AC+1);
 		mitigation -= 4;
 	}
 	else
 	{
-		mitigation = GetSkill(DEFENSE)/3 + ((itembonuses.AC*4)/3);
+		mitigation = GetSkill(SkillDefense)/3 + ((itembonuses.AC*4)/3);
 		if(GetClass() == MONK)
 			mitigation += GetLevel() * 13/10;	//the 13/10 might be wrong, but it is close...
 	}
@@ -1289,56 +1290,56 @@ void Bot::GenerateArmorClass()
 
 uint16 Bot::GetPrimarySkillValue()
 {
-	SkillType skill = HIGHEST_SKILL; //because nullptr == 0, which is 1H Slashing, & we want it to return 0 from GetSkill
+	SkillUseTypes skill = HIGHEST_SKILL; //because nullptr == 0, which is 1H Slashing, & we want it to return 0 from GetSkill
 	bool equiped = m_inv.GetItem(SLOT_PRIMARY);
 
 	if(!equiped)
 	{
-		skill = HAND_TO_HAND;
+		skill = SkillHandtoHand;
 	}
 	else
 	{
 		uint8 type = m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType; //is this the best way to do this?
 		switch(type)
 		{
-			case ItemType1HS: // 1H Slashing
+			case ItemType1HSlash: // 1H Slashing
 			{
-				skill = _1H_SLASHING;
+				skill = Skill1HSlashing;
 				break;
 			}
-			case ItemType2HS: // 2H Slashing
+			case ItemType2HSlash: // 2H Slashing
 			{
-				skill = _2H_SLASHING;
+				skill = Skill2HSlashing;
 				break;
 			}
-			case ItemTypePierce: // Piercing
+			case ItemType1HPiercing: // Piercing
 			{
-				skill = PIERCING;
+				skill = Skill1HPiercing;
 				break;
 			}
-			case ItemType1HB: // 1H Blunt
+			case ItemType1HBlunt: // 1H Blunt
 			{
-				skill = _1H_BLUNT;
+				skill = Skill1HBlunt;
 				break;
 			}
-			case ItemType2HB: // 2H Blunt
+			case ItemType2HBlunt: // 2H Blunt
 			{
-				skill = _2H_BLUNT;
+				skill = Skill2HBlunt;
 				break;
 			}
-			case ItemType2HPierce: // 2H Piercing
+			case ItemType2HPiercing: // 2H Piercing
 			{
-				skill = PIERCING;
+				skill = Skill1HPiercing; // change to Skill2HPiercing once activated
 				break;
 			}
-			case ItemTypeHand2Hand: // Hand to Hand
+			case ItemTypeMartial: // Hand to Hand
 			{
-				skill = HAND_TO_HAND;
+				skill = SkillHandtoHand;
 				break;
 			}
 			default: // All other types default to Hand to Hand
 			{
-				skill = HAND_TO_HAND;
+				skill = SkillHandtoHand;
 				break;
 			}
 		}
@@ -1347,7 +1348,7 @@ uint16 Bot::GetPrimarySkillValue()
 	return GetSkill(skill);
 }
 
-uint16 Bot::MaxSkill(SkillType skillid, uint16 class_, uint16 level) const {
+uint16 Bot::MaxSkill(SkillUseTypes skillid, uint16 class_, uint16 level) const {
 	return(database.GetSkillCap(class_, skillid, level));
 }
 
@@ -1357,7 +1358,7 @@ uint16 Bot::GetTotalATK()
 	uint16 WornCap = itembonuses.ATK;
 
 	if(IsBot()) {
-		AttackRating = ((WornCap * 1.342) + (GetSkill(OFFENSE) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69));
+		AttackRating = ((WornCap * 1.342) + (GetSkill(SkillOffense) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69));
 		AttackRating += aabonuses.ATK + GroupLeadershipAAOffenseEnhancement();
 
 		if (AttackRating < 10)
@@ -1375,7 +1376,7 @@ uint16 Bot::GetATKRating()
 {
 	uint16 AttackRating = 0;
 	if(IsBot()) {
-		AttackRating = (GetSkill(OFFENSE) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69);
+		AttackRating = (GetSkill(SkillOffense) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69);
 
 		if (AttackRating < 10)
 			AttackRating = 10;
@@ -1970,8 +1971,8 @@ void Bot::ApplyAABonuses(uint32 aaid, uint32 slots, StatBonuses* newbon)
 			{
 				newbon->CriticalSpellChance += base1;
 
-				if (base2 > 100)
-					newbon->SpellCritDmgIncrease += (base2 - 100);
+				if (base2 > newbon->SpellCritDmgIncrease)
+					newbon->SpellCritDmgIncrease = base2;
 
 				break;
 			}
@@ -2475,7 +2476,7 @@ void Bot::SaveBuffs() {
 
 			if(!database.RunQuery(Query, MakeAnyLenString(&Query, "INSERT INTO botbuffs (BotId, SpellId, CasterLevel, DurationFormula, "
 				"TicsRemaining, PoisonCounters, DiseaseCounters, CurseCounters, CorruptionCounters, HitCount, MeleeRune, MagicRune, "
-				"DeathSaveSuccessChance, CasterAARank, Persistent) VALUES (%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u);",
+				"dot_rune, caston_x, Persistent, caston_y, caston_z, ExtraDIChance) VALUES (%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %i, %u, %i, %i, %i);",
 				GetBotID(), buffs[BuffCount].spellid, buffs[BuffCount].casterlevel, spells[buffs[BuffCount].spellid].buffdurationformula,
 				buffs[BuffCount].ticsremaining,
 				CalculatePoisonCounters(buffs[BuffCount].spellid) > 0 ? buffs[BuffCount].counters : 0,
@@ -2483,8 +2484,12 @@ void Bot::SaveBuffs() {
 				CalculateCurseCounters(buffs[BuffCount].spellid) > 0 ? buffs[BuffCount].counters : 0,
 				CalculateCorruptionCounters(buffs[BuffCount].spellid) > 0 ? buffs[BuffCount].counters : 0,
 				buffs[BuffCount].numhits, buffs[BuffCount].melee_rune, buffs[BuffCount].magic_rune,
-				buffs[BuffCount].deathSaveSuccessChance,
-				buffs[BuffCount].deathsaveCasterAARank, IsPersistent), TempErrorMessageBuffer)) {
+				buffs[BuffCount].dot_rune,
+				buffs[BuffCount].caston_x, 
+				IsPersistent, 
+				buffs[BuffCount].caston_y,
+				buffs[BuffCount].caston_z, 
+				buffs[BuffCount].ExtraDIChance), TempErrorMessageBuffer)) {
 				errorMessage = std::string(TempErrorMessageBuffer);
 				safe_delete(Query);
 				Query = 0;
@@ -2514,7 +2519,7 @@ void Bot::LoadBuffs() {
 
 	bool BuffsLoaded = false;
 
-	if(!database.RunQuery(Query, MakeAnyLenString(&Query, "SELECT SpellId, CasterLevel, DurationFormula, TicsRemaining, PoisonCounters, DiseaseCounters, CurseCounters, CorruptionCounters, HitCount, MeleeRune, MagicRune, DeathSaveSuccessChance, CasterAARank, Persistent FROM botbuffs WHERE BotId = %u", GetBotID()), TempErrorMessageBuffer, &DatasetResult)) {
+	if(!database.RunQuery(Query, MakeAnyLenString(&Query, "SELECT SpellId, CasterLevel, DurationFormula, TicsRemaining, PoisonCounters, DiseaseCounters, CurseCounters, CorruptionCounters, HitCount, MeleeRune, MagicRune, dot_rune, caston_x, Persistent, caston_y, caston_z, ExtraDIChance FROM botbuffs WHERE BotId = %u", GetBotID()), TempErrorMessageBuffer, &DatasetResult)) {
 		errorMessage = std::string(TempErrorMessageBuffer);
 	}
 	else {
@@ -2540,14 +2545,18 @@ void Bot::LoadBuffs() {
 			buffs[BuffCount].numhits = atoi(DataRow[8]);
 			buffs[BuffCount].melee_rune = atoi(DataRow[9]);
 			buffs[BuffCount].magic_rune = atoi(DataRow[10]);
-			buffs[BuffCount].deathSaveSuccessChance = atoi(DataRow[11]);
-			buffs[BuffCount].deathsaveCasterAARank = atoi(DataRow[12]);
+			buffs[BuffCount].dot_rune = atoi(DataRow[11]);
+			buffs[BuffCount].caston_x = atoi(DataRow[12]);
 			buffs[BuffCount].casterid = 0;
 
 			bool IsPersistent = false;
 
 			if(atoi(DataRow[13]))
 				IsPersistent = true;
+
+			buffs[BuffCount].caston_y = atoi(DataRow[14]);
+			buffs[BuffCount].caston_z = atoi(DataRow[15]);
+			buffs[BuffCount].ExtraDIChance = atoi(DataRow[16]);
 
 			buffs[BuffCount].persistant_buff = IsPersistent;
 
@@ -2620,6 +2629,7 @@ void Bot::LoadPet() {
 		if(GetPet() && GetPet()->IsNPC()) {
 			NPC *pet = GetPet()->CastToNPC();
 			SpellBuff_Struct petBuffs[BUFF_COUNT];
+			memset(petBuffs, 0, sizeof(petBuffs));
 			uint32 petItems[MAX_WORN_INVENTORY];
 
 			LoadPetBuffs(petBuffs, PetSaveId);
@@ -3048,8 +3058,6 @@ void Bot::SaveTimers() {
 
 bool Bot::Process()
 {
-	_ZP(Bot_Process);
-
 	if(IsStunned() && stunned_timer.Check())
 	{
 		this->stunned = false;
@@ -3206,7 +3214,7 @@ void Bot::BotRangedAttack(Mob* other) {
 		return;
 	}
 
-	SendItemAnimation(other, Ammo, ARCHERY);
+	SendItemAnimation(other, Ammo, SkillArchery);
 
 	DoArcheryAttackDmg(GetTarget(), rangedItem, ammoItem);
 
@@ -3248,13 +3256,13 @@ bool Bot::CheckBotDoubleAttack(bool tripleAttack) {
 	uint16 bonusGiveDA = aabonuses.GiveDoubleAttack + spellbonuses.GiveDoubleAttack + itembonuses.GiveDoubleAttack;
 
 	// If you don't have the double attack skill, return
-	if(!GetSkill(DOUBLE_ATTACK) && !(GetClass() == BARD || GetClass() == BEASTLORD))
+	if(!GetSkill(SkillDoubleAttack) && !(GetClass() == BARD || GetClass() == BEASTLORD))
 		return false;
 
 	// You start with no chance of double attacking
 	float chance = 0.0f;
 
-	uint16 skill = GetSkill(DOUBLE_ATTACK);
+	uint16 skill = GetSkill(SkillDoubleAttack);
 
 	int16 bonusDA = aabonuses.DoubleAttackChance + spellbonuses.DoubleAttackChance + itembonuses.DoubleAttackChance;
 
@@ -3281,15 +3289,15 @@ bool Bot::CheckBotDoubleAttack(bool tripleAttack) {
 	return false;
 }
 
-void Bot::DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillType skillinuse, int16 chance_mod, int16 focus, bool CanRiposte)
+void Bot::DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillUseTypes skillinuse, int16 chance_mod, int16 focus, bool CanRiposte)
 {
 	if (!CanDoSpecialAttack(other))
 		return;
 
 	//For spells using skill value 98 (feral swipe ect) server sets this to 67 automatically.
 	//Kayen: This is unlikely to be completely accurate but use OFFENSE skill value for these effects.
-	if (skillinuse == BEGGING)
-		skillinuse = OFFENSE;
+	if (skillinuse == SkillBegging)
+		skillinuse = SkillOffense;
 
 	int damage = 0;
 	uint32 hate = 0;
@@ -3335,7 +3343,7 @@ void Bot::DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillType skil
 			if(damage > 0) {
 				damage += damage*focus/100;
 				ApplyMeleeDamageBonus(skillinuse, damage);
-				damage += other->GetAdditionalDamage(this, 0, true, skillinuse);
+				damage += other->GetFcDamageAmtIncoming(this, 0, true, skillinuse);
 				damage += (itembonuses.HeroicSTR / 10) + (damage * other->GetSkillDmgTaken(skillinuse) / 100) + GetSkillDmgAmt(skillinuse);
 				TryCriticalHit(other, skillinuse, damage, nullptr);
 			}
@@ -3351,7 +3359,7 @@ void Bot::DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillType skil
 	else
 		damage = -5;
 
-	if(skillinuse == BASH){
+	if(skillinuse == SkillBash){
 		const ItemInst* inst = GetBotItem(SLOT_SECONDARY);
 		const Item_Struct* botweapon = 0;
 		if(inst)
@@ -3367,8 +3375,8 @@ void Bot::DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillType skil
 	other->AddToHateList(this, hate);
 
 	bool CanSkillProc = true;
-	if (skillinuse == OFFENSE){ //Hack to allow damage to display.
-		skillinuse = TIGER_CLAW; //'strike' your opponent - Arbitrary choice for message.
+	if (skillinuse == SkillOffense){ //Hack to allow damage to display.
+		skillinuse = SkillTigerClaw; //'strike' your opponent - Arbitrary choice for message.
 		CanSkillProc = false; //Disable skill procs
 	}
 
@@ -3377,7 +3385,10 @@ void Bot::DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillType skil
 	if (HasDied())
 		return;
 
-	if((skillinuse == DRAGON_PUNCH) && GetAA(aaDragonPunch) && MakeRandomInt(0, 99) < 25){
+	if (damage > 0)
+		CheckNumHitsRemaining(5);
+
+	if((skillinuse == SkillDragonPunch) && GetAA(aaDragonPunch) && MakeRandomInt(0, 99) < 25){
 		SpellFinished(904, other, 10, 0, -1, spells[904].ResistDiff);
 		other->Stun(100);
 	}
@@ -3388,26 +3399,26 @@ void Bot::DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillType skil
 	}
 }
 
-void Bot::ApplySpecialAttackMod(SkillType skill, int32 &dmg, int32 &mindmg) {
+void Bot::ApplySpecialAttackMod(SkillUseTypes skill, int32 &dmg, int32 &mindmg) {
 
 	int item_slot = -1;
 	//1: Apply bonus from AC (BOOT/SHIELD/HANDS) est. 40AC=6dmg
 
 	switch (skill){
 
-		case FLYING_KICK:
-		case ROUND_KICK:
-		case KICK:
+		case SkillFlyingKick:
+		case SkillRoundKick:
+		case SkillKick:
 			item_slot = SLOT_FEET;
 		break;
 
-		case BASH:
+		case SkillBash:
 			item_slot = SLOT_SECONDARY;
 		break;
 
-		case DRAGON_PUNCH:
-		case EAGLE_STRIKE:
-		case TIGER_CLAW:
+		case SkillDragonPunch:
+		case SkillEagleStrike:
+		case SkillTigerClaw:
 			item_slot = SLOT_HANDS;
 		break;
 	}
@@ -3495,8 +3506,6 @@ float Bot::GetMaxMeleeRangeToTarget(Mob* target) {
 
 // AI Processing for the Bot object
 void Bot::AI_Process() {
-	_ZP(Mob_BOT_Process);
-
 	if(!IsAIControlled())
 		return;
 
@@ -3609,7 +3618,6 @@ void Bot::AI_Process() {
 
 	if(IsEngaged())
 	{
-		_ZP(Mob_BOT_Process_IsEngaged);
 
 		if(rest_timer.Enabled())
 			rest_timer.Disable();
@@ -3794,7 +3802,7 @@ void Bot::AI_Process() {
 					{
 						if(MakeRandomInt(0, 100) < flurrychance)
 						{
-							Message_StringID(MT_NPCFlurry, 128);
+							Message_StringID(MT_NPCFlurry, YOU_FLURRY);
 							Attack(GetTarget(), SLOT_PRIMARY, false);
 							Attack(GetTarget(), SLOT_PRIMARY, false);
 						}
@@ -3805,9 +3813,9 @@ void Bot::AI_Process() {
 					if (GetTarget() && ExtraAttackChanceBonus) {
 						ItemInst *wpn = GetBotItem(SLOT_PRIMARY);
 						if(wpn){
-							if(wpn->GetItem()->ItemType == ItemType2HS ||
-								wpn->GetItem()->ItemType == ItemType2HB ||
-								wpn->GetItem()->ItemType == ItemType2HPierce )
+							if(wpn->GetItem()->ItemType == ItemType2HSlash ||
+								wpn->GetItem()->ItemType == ItemType2HBlunt ||
+								wpn->GetItem()->ItemType == ItemType2HPiercing )
 							{
 								if(MakeRandomInt(0, 100) < ExtraAttackChanceBonus)
 								{
@@ -3846,11 +3854,11 @@ void Bot::AI_Process() {
 							bIsFist = false;
 						}
 
-						if(bIsFist || ((weapontype != ItemType2HS) && (weapontype != ItemType2HPierce) && (weapontype != ItemType2HB))) {
+						if(bIsFist || ((weapontype != ItemType2HSlash) && (weapontype != ItemType2HPiercing) && (weapontype != ItemType2HBlunt))) {
 							float DualWieldProbability = 0.0f;
 
 							int16 Ambidexterity = aabonuses.Ambidexterity + spellbonuses.Ambidexterity + itembonuses.Ambidexterity;
-							DualWieldProbability = (GetSkill(DUAL_WIELD) + GetLevel() + Ambidexterity) / 400.0f; // 78.0 max
+							DualWieldProbability = (GetSkill(SkillDualWield) + GetLevel() + Ambidexterity) / 400.0f; // 78.0 max
 							int16 DWBonus = spellbonuses.DualWieldChance + itembonuses.DualWieldChance;
 							DualWieldProbability += DualWieldProbability*float(DWBonus)/ 100.0f;
 
@@ -3956,7 +3964,6 @@ void Bot::AI_Process() {
 
 // AI Processing for a Bot object's pet
 void Bot::PetAIProcess() {
-	_ZP(Bot_PET_Process);
 
 	if( !HasPet() || !GetPet() || !GetPet()->IsNPC())
 		return;
@@ -3983,7 +3990,6 @@ void Bot::PetAIProcess() {
 		return;
 
 	if (IsEngaged()) {
-		_ZP(Bot_PET_Process_IsEngaged);
 
 		if (botPet->IsRooted())
 			botPet->SetTarget(hate_list.GetClosest(botPet));
@@ -4132,7 +4138,7 @@ void Bot::PetAIProcess() {
 						{
 							if(botPet->GetOwner()->GetLevel() >= 24)
 							{
-								float DualWieldProbability = (botPet->GetSkill(DUAL_WIELD) + botPet->GetLevel()) / 400.0f;
+								float DualWieldProbability = (botPet->GetSkill(SkillDualWield) + botPet->GetLevel()) / 400.0f;
 								DualWieldProbability -= MakeRandomFloat(0, 1);
 								if(DualWieldProbability < 0){
 									botPet->Attack(botPet->GetTarget(), 14);
@@ -4589,8 +4595,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_HANDS]	= item->Material;
-				ns->spawn.colors[MATERIAL_HANDS].color = GetEquipmentColor(MATERIAL_HANDS);
+				ns->spawn.equipment[MaterialHands]	= item->Material;
+				ns->spawn.colors[MaterialHands].color = GetEquipmentColor(MaterialHands);
 			}
 		}
 
@@ -4598,8 +4604,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_HEAD] = item->Material;
-				ns->spawn.colors[MATERIAL_HEAD].color = GetEquipmentColor(MATERIAL_HEAD);
+				ns->spawn.equipment[MaterialHead] = item->Material;
+				ns->spawn.colors[MaterialHead].color = GetEquipmentColor(MaterialHead);
 			}
 		}
 
@@ -4607,8 +4613,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_ARMS] = item->Material;
-				ns->spawn.colors[MATERIAL_ARMS].color = GetEquipmentColor(MATERIAL_ARMS);
+				ns->spawn.equipment[MaterialArms] = item->Material;
+				ns->spawn.colors[MaterialArms].color = GetEquipmentColor(MaterialArms);
 			}
 		}
 
@@ -4616,8 +4622,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_BRACER] = item->Material;
-				ns->spawn.colors[MATERIAL_BRACER].color	= GetEquipmentColor(MATERIAL_BRACER);
+				ns->spawn.equipment[MaterialWrist] = item->Material;
+				ns->spawn.colors[MaterialWrist].color	= GetEquipmentColor(MaterialWrist);
 			}
 		}
 
@@ -4625,8 +4631,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_BRACER] = item->Material;
-				ns->spawn.colors[MATERIAL_BRACER].color	= GetEquipmentColor(MATERIAL_BRACER);
+				ns->spawn.equipment[MaterialWrist] = item->Material;
+				ns->spawn.colors[MaterialWrist].color	= GetEquipmentColor(MaterialWrist);
 			}
 		}
 
@@ -4634,8 +4640,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_CHEST]	= item->Material;
-				ns->spawn.colors[MATERIAL_CHEST].color = GetEquipmentColor(MATERIAL_CHEST);
+				ns->spawn.equipment[MaterialChest]	= item->Material;
+				ns->spawn.colors[MaterialChest].color = GetEquipmentColor(MaterialChest);
 			}
 		}
 
@@ -4643,8 +4649,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_LEGS] = item->Material;
-				ns->spawn.colors[MATERIAL_LEGS].color = GetEquipmentColor(MATERIAL_LEGS);
+				ns->spawn.equipment[MaterialLegs] = item->Material;
+				ns->spawn.colors[MaterialLegs].color = GetEquipmentColor(MaterialLegs);
 			}
 		}
 
@@ -4652,8 +4658,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 		if(inst) {
 			item = inst->GetItem();
 			if(item) {
-				ns->spawn.equipment[MATERIAL_FEET] = item->Material;
-				ns->spawn.colors[MATERIAL_FEET].color = GetEquipmentColor(MATERIAL_FEET);
+				ns->spawn.equipment[MaterialFeet] = item->Material;
+				ns->spawn.colors[MaterialFeet].color = GetEquipmentColor(MaterialFeet);
 			}
 		}
 
@@ -4662,8 +4668,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 			item = inst->GetItem();
 			if(item) {
 				if(strlen(item->IDFile) > 2)
-					ns->spawn.equipment[MATERIAL_PRIMARY] = atoi(&item->IDFile[2]);
-					ns->spawn.colors[MATERIAL_PRIMARY].color = GetEquipmentColor(MATERIAL_PRIMARY);
+					ns->spawn.equipment[MaterialPrimary] = atoi(&item->IDFile[2]);
+					ns->spawn.colors[MaterialPrimary].color = GetEquipmentColor(MaterialPrimary);
 			}
 		}
 
@@ -4672,8 +4678,8 @@ void Bot::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho) {
 			item = inst->GetItem();
 			if(item) {
 				if(strlen(item->IDFile) > 2)
-					ns->spawn.equipment[MATERIAL_SECONDARY] = atoi(&item->IDFile[2]);
-					ns->spawn.colors[MATERIAL_SECONDARY].color = GetEquipmentColor(MATERIAL_SECONDARY);
+					ns->spawn.equipment[MaterialSecondary] = atoi(&item->IDFile[2]);
+					ns->spawn.colors[MaterialSecondary].color = GetEquipmentColor(MaterialSecondary);
 			}
 		}
 	}
@@ -4779,7 +4785,7 @@ void Bot::LoadAndSpawnAllZonedBots(Client* botOwner) {
 				std::list<uint32> ActiveBots = Bot::GetGroupedBotsByGroupId(botOwner->GetGroup()->GetID(), &errorMessage);
 
 				if(errorMessage.empty() && !ActiveBots.empty()) {
-					for(std::list<uint32>::iterator itr = ActiveBots.begin(); itr != ActiveBots.end(); itr++) {
+					for(std::list<uint32>::iterator itr = ActiveBots.begin(); itr != ActiveBots.end(); ++itr) {
 						Bot* activeBot = Bot::LoadBot(*itr, &errorMessage);
 
 						if(!errorMessage.empty()) {
@@ -5436,8 +5442,8 @@ void Bot::BotRemoveEquipItem(int slot) {
 		if(materialFromSlot != 0xFF) {
 			equipment[slot] = 0; // npc has more than just material slots. Valid material should mean valid inventory index
 			SendWearChange(materialFromSlot);
-			if(materialFromSlot == MATERIAL_CHEST)
-				SendWearChange(MATERIAL_ARMS);
+			if(materialFromSlot == MaterialChest)
+				SendWearChange(MaterialArms);
 		}
 	}
 }
@@ -6044,9 +6050,9 @@ void Bot::PerformTradeWithClient(int16 beginSlotID, int16 endSlotID, Client* cli
 							how_many_slots++;
 							if(!GetBotItem(j)) {
 								if(j == SLOT_PRIMARY) {
-									if((mWeaponItem->ItemType == ItemType2HS) || (mWeaponItem->ItemType == ItemType2HB) || (mWeaponItem->ItemType == ItemType2HPierce)) {
+									if((mWeaponItem->ItemType == ItemType2HSlash) || (mWeaponItem->ItemType == ItemType2HBlunt) || (mWeaponItem->ItemType == ItemType2HPiercing)) {
 										if(GetBotItem(SLOT_SECONDARY)) {
-											if(mWeaponItem && (mWeaponItem->ItemType == ItemType2HS) || (mWeaponItem->ItemType == ItemType2HB) || (mWeaponItem->ItemType == ItemType2HPierce)) {
+											if(mWeaponItem && (mWeaponItem->ItemType == ItemType2HSlash) || (mWeaponItem->ItemType == ItemType2HBlunt) || (mWeaponItem->ItemType == ItemType2HPiercing)) {
 												if(client->CheckLoreConflict(GetBotItem(SLOT_SECONDARY)->GetItem())) {
 													failedLoreCheck = true;
 												}
@@ -6081,7 +6087,7 @@ void Bot::PerformTradeWithClient(int16 beginSlotID, int16 endSlotID, Client* cli
 									if(success) {
 										if(GetBotItem(SLOT_PRIMARY)) {
 											ItemInst* remove_item = GetBotItem(SLOT_PRIMARY);
-											if((remove_item->GetItem()->ItemType == ItemType2HS) || (remove_item->GetItem()->ItemType == ItemType2HB) || (remove_item->GetItem()->ItemType == ItemType2HPierce)) {
+											if((remove_item->GetItem()->ItemType == ItemType2HSlash) || (remove_item->GetItem()->ItemType == ItemType2HBlunt) || (remove_item->GetItem()->ItemType == ItemType2HPiercing)) {
 												BotTradeSwapItem(client, SLOT_PRIMARY, 0, remove_item, remove_item->GetItem()->Slots, &TempErrorMessage, false);
 											}
 										}
@@ -6115,7 +6121,7 @@ void Bot::PerformTradeWithClient(int16 beginSlotID, int16 endSlotID, Client* cli
 								}
 								if(!failedLoreCheck) {
 									if(j == SLOT_PRIMARY) {
-										if((mWeaponItem->ItemType == ItemType2HS) || (mWeaponItem->ItemType == ItemType2HB) || (mWeaponItem->ItemType == ItemType2HPierce)) {
+										if((mWeaponItem->ItemType == ItemType2HSlash) || (mWeaponItem->ItemType == ItemType2HBlunt) || (mWeaponItem->ItemType == ItemType2HPiercing)) {
 											if(GetBotItem(SLOT_SECONDARY)) {
 												if(client->CheckLoreConflict(GetBotItem(SLOT_SECONDARY)->GetItem())) {
 													failedLoreCheck = true;
@@ -6149,7 +6155,7 @@ void Bot::PerformTradeWithClient(int16 beginSlotID, int16 endSlotID, Client* cli
 										}
 										if(success && GetBotItem(SLOT_PRIMARY)) {
 											ItemInst* remove_item = GetBotItem(SLOT_PRIMARY);
-											if((remove_item->GetItem()->ItemType == ItemType2HS) || (remove_item->GetItem()->ItemType == ItemType2HB) || (remove_item->GetItem()->ItemType == ItemType2HPierce)) {
+											if((remove_item->GetItem()->ItemType == ItemType2HSlash) || (remove_item->GetItem()->ItemType == ItemType2HBlunt) || (remove_item->GetItem()->ItemType == ItemType2HPiercing)) {
 												BotTradeSwapItem(client, SLOT_PRIMARY, 0, remove_item, remove_item->GetItem()->Slots, &TempErrorMessage, false);
 											}
 										}
@@ -6200,7 +6206,7 @@ void Bot::PerformTradeWithClient(int16 beginSlotID, int16 endSlotID, Client* cli
 	}
 }
 
-bool Bot::Death(Mob *killerMob, int32 damage, uint16 spell_id, SkillType attack_skill) {
+bool Bot::Death(Mob *killerMob, int32 damage, uint16 spell_id, SkillUseTypes attack_skill) {
 	if(!NPC::Death(killerMob, damage, spell_id, attack_skill))
 		return false;
 
@@ -6305,7 +6311,7 @@ bool Bot::Death(Mob *killerMob, int32 damage, uint16 spell_id, SkillType attack_
 	return true;
 }
 
-void Bot::Damage(Mob *from, int32 damage, uint16 spell_id, SkillType attack_skill, bool avoidable, int8 buffslot, bool iBuffTic) {
+void Bot::Damage(Mob *from, int32 damage, uint16 spell_id, SkillUseTypes attack_skill, bool avoidable, int8 buffslot, bool iBuffTic) {
 	if(spell_id==0)
 		spell_id = SPELL_UNKNOWN;
 
@@ -6367,8 +6373,6 @@ void Bot::AddToHateList(Mob* other, int32 hate, int32 damage, bool iYellForHelp,
 
 bool Bot::Attack(Mob* other, int Hand, bool FromRiposte, bool IsStrikethrough, bool IsFromSpell, ExtraAttackOptions *opts)
 {
-	_ZP(Bot_Attack);
-
 	if (!other) {
 		SetTarget(nullptr);
 		LogFile->write(EQEMuLog::Error, "A null Mob object was passed to Bot::Attack for evaluation!");
@@ -6432,7 +6436,7 @@ bool Bot::Attack(Mob* other, int Hand, bool FromRiposte, bool IsStrikethrough, b
 
 	// calculate attack_skill and skillinuse depending on hand and weapon
 	// also send Packet to near clients
-	SkillType skillinuse;
+	SkillUseTypes skillinuse;
 	AttackAnimation(skillinuse, Hand, weapon);
 	mlog(COMBAT__ATTACKS, "Attacking with %s in slot %d using skill %d", weapon?weapon->GetItem()->Name:"Fist", Hand, skillinuse);
 
@@ -6464,9 +6468,9 @@ bool Bot::Attack(Mob* other, int Hand, bool FromRiposte, bool IsStrikethrough, b
 		int min_hit = 1;
 		int max_hit = (2*weapon_damage*GetDamageTable(skillinuse)) / 100;
 
-		if(GetLevel() < 10 && max_hit > 20)
+		if(GetLevel() < 10 && max_hit > RuleI(Combat, HitCapPre10))
 			max_hit = (RuleI(Combat, HitCapPre10));
-		else if(GetLevel() < 20 && max_hit > 40)
+		else if(GetLevel() < 20 && max_hit > RuleI(Combat, HitCapPre20))
 			max_hit = (RuleI(Combat, HitCapPre20));
 
 		// ***************************************************************
@@ -6600,21 +6604,10 @@ bool Bot::Attack(Mob* other, int Hand, bool FromRiposte, bool IsStrikethrough, b
 
 	if (GetHP() < 0) return false;
 
-	if(damage > 0 && (spellbonuses.MeleeLifetap || itembonuses.MeleeLifetap))
-	{
-		int lifetap_amt = spellbonuses.MeleeLifetap + itembonuses.MeleeLifetap;
-		if(lifetap_amt > 100)
-			lifetap_amt = 100;
+	MeleeLifeTap(damage);
 
-		lifetap_amt = damage * lifetap_amt / 100;
-
-		mlog(COMBAT__DAMAGE, "Melee lifetap healing for %d damage.", damage);
-		//heal self for damage done..
-		HealDamage(lifetap_amt);
-
-		if (spellbonuses.MeleeLifetap)
-			CheckHitsRemaining(0, false,false, SE_MeleeLifetap);
-	}
+	if (damage > 0)
+		CheckNumHitsRemaining(5);
 
 	//break invis when you attack
 	if(invisible) {
@@ -6746,7 +6739,7 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 				if((spell.classes[(GetClass()%16) - 1]) < base1)
 					LimitFound = true;
 			break;
-			case SE_LimitCastTime:
+			case SE_LimitCastTimeMin:
 				if (spell.cast_time < base1)
 					LimitFound = true;
 			break;
@@ -6792,7 +6785,7 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 				}
 			break;
 
-			case SE_LimitManaCost:
+			case SE_LimitManaMin:
 				if(spell.mana < base1)
 					LimitFound = true;
 			break;
@@ -6810,7 +6803,7 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 			}
 			break;
 
-			case SE_CombatSkills:
+			case SE_LimitCombatSkills:
 				// 1 is for disciplines only
 				if(base1 == 1 && !IsDiscipline(spell_id))
 					LimitFound = true;
@@ -6827,18 +6820,11 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 			break;
 
 
-			case SE_LimitSpellSkill:
+			case SE_LimitCastingSkill:
 				LimitSpellSkill = true;
 				if(base1 == spell.skill)
 					SpellSkill_Found = true;
 			break;
-
-			case SE_LimitExcludeSkill:{
-			int16 spell_skill = spell.skill * -1;
-			if(base1 == spell_skill)
-				LimitFound = true;
-			break;
-			}
 
 			case SE_LimitClass:
 			//Do not use this limit more then once per spell. If multiple class, treat value like items would.
@@ -6951,7 +6937,7 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 				}
 				break;
 			}
-			case SE_SpellVulnerability:
+			case SE_FcSpellVulnerability:
 			{
 				if(type == focusSpellVulnerability)
 				{
@@ -6968,7 +6954,7 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 				}
 				break;
 			}
-			case SE_Twincast:
+			case SE_FcTwincast:
 			{
 				if(type == focusTwincast)
 				{
@@ -6996,78 +6982,71 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 				break;
 			}
 			*/
-			case SE_SpellDamage:
+			case SE_FcDamageAmt:
 			{
-				if(type == focusSpellDamage)
+				if(type == focusFcDamageAmt)
 					value = base1;
 
 				break;
 			}
 
-			case SE_FF_Damage_Amount:
+			case SE_FcDamageAmtCrit:
 			{
-				if(type == focusFF_Damage_Amount)
+				if(type == focusFcDamageAmtCrit)
 					value = base1;
 
 				break;
 			}
 
-			case SE_Empathy:
+			case SE_FcDamageAmtIncoming:
 			{
-				if(type == focusAdditionalDamage)
+				if(type == focusFcDamageAmtIncoming)
 					value = base1;
 
 				break;
 			}
 
-			case SE_CriticalHealRate:
+			case SE_FcHealAmtIncoming:
+				if(type == focusFcHealAmtIncoming)
+					value = base1;
+				break;
+
+			case SE_FcHealPctCritIncoming:
+				if (type == focusFcHealPctCritIncoming)
+					value = base1;
+				break;
+
+			case SE_FcHealAmtCrit:
+				if(type == focusFcHealAmtCrit)
+					value = base1;
+				break;
+
+			case  SE_FcHealAmt:
+				if(type == focusFcHealAmt)
+					value = base1;
+				break;
+
+			case SE_FcHealPctIncoming:
+				if(type == focusFcHealPctIncoming)
+					value = base1;
+				break;
+
+			case SE_FcBaseEffects:
 			{
-				if (type == focusCriticalHealRate)
+				if (type == focusFcBaseEffects)
+					value = base1;
+
+				break;
+			}
+			case SE_FcDamagePctCrit:
+			{
+				if(type == focusFcDamagePctCrit)
 					value = base1;
 
 				break;
 			}
 
-			case SE_AdditionalHeal:
-			{
-				if(type == focusAdditionalHeal)
-					value = base1;
-
-				break;
-			}
-
-			case SE_AdditionalHeal2:
-			{
-				if(type == focusAdditionalHeal2)
-					value = base1;
-
-				break;
-			}
-
-			case SE_HealRate2:
-			{
-				if(type == focusHealRate)
-					value = base1;
-
-				break;
-			}
-
-			case SE_IncreaseSpellPower:
-			{
-				if (type == focusSpellEffectiveness)
-					value = base1;
-
-				break;
-			}
-			case SE_ImprovedDamage2:
-			{
-				if(type == focusImprovedDamage2)
-					value = base1;
-
-				break;
-			}
-
-			case SE_IncreaseNumHits:
+			case SE_FcIncreaseNumHits:
 			{
 				if(type == focusIncreaseNumHits)
 					value = base1;
@@ -7090,7 +7069,7 @@ int16 Bot::CalcBotAAFocus(BotfocusType type, uint32 aa_ID, uint16 spell_id)
 }
 
 int16 Bot::GetBotFocusEffect(BotfocusType bottype, uint16 spell_id) {
-	if (IsBardSong(spell_id) && bottype != BotfocusSpellEffectiveness)
+	if (IsBardSong(spell_id) && bottype != BotfocusFcBaseEffects)
 		return 0;
 
 	int16 realTotal = 0;
@@ -7348,7 +7327,7 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 				return(0);
 			break;
 
-		case SE_LimitCastTime:
+		case SE_LimitCastTimeMin:
 			if (spells[spell_id].cast_time < (uint16)focus_spell.base[i])
 				return(0);
 			break;
@@ -7408,7 +7387,7 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 			}
 			break;
 
-		case SE_LimitManaCost:
+		case SE_LimitManaMin:
 				if(spell.mana < focus_spell.base[i])
 					return 0;
 			break;
@@ -7423,7 +7402,7 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 
 			break;
 
-		case SE_CombatSkills:
+		case SE_LimitCombatSkills:
 				// 1 is for disciplines only
 				if(focus_spell.base[i] == 1 && !IsDiscipline(spell_id))
 					return 0;
@@ -7439,18 +7418,11 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 					return 0;
 			break;
 
-		case SE_LimitSpellSkill:
+		case SE_LimitCastingSkill:
 				LimitSpellSkill = true;
 				if(focus_spell.base[i] == spell.skill)
 					SpellSkill_Found = true;
 			break;
-
-		case SE_LimitExcludeSkill:{
-			int16 spell_skill = spell.skill * -1;
-			if(focus_spell.base[i] == spell_skill)
-				return 0;
-			break;
-			}
 
 		case SE_LimitClass:
 			//Do not use this limit more then once per spell. If multiple class, treat value like items would.
@@ -7612,7 +7584,7 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 
 			break;
 		}
-		case SE_SpellVulnerability:
+		case SE_FcSpellVulnerability:
 		{
 			if(bottype == BotfocusSpellVulnerability)
 			{
@@ -7629,7 +7601,7 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 			}
 			break;
 		}
-		case SE_Twincast:
+		case SE_FcTwincast:
 		{
 			if(bottype == BotfocusTwincast)
 			{
@@ -7654,78 +7626,63 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 			}
 			break;
 		}
-		case SE_SpellDamage:
+		case SE_FcDamageAmt:
 		{
-			if(bottype == BotfocusSpellDamage)
+			if(bottype == BotfocusFcDamageAmt)
 				value = focus_spell.base[i];
 
 			break;
 		}
 
-		case SE_FF_Damage_Amount:
+		case SE_FcDamageAmtCrit:
 		{
-			if(bottype == BotfocusFF_Damage_Amount)
+			if(bottype == BotfocusFcDamageAmtCrit)
 				value = focus_spell.base[i];
 
 			break;
 		}
 
-		case SE_Empathy:
+		case SE_FcHealAmtIncoming:
+			if(bottype == BotfocusFcHealAmtIncoming)
+				value = focus_spell.base[i];
+			break;
+
+		case SE_FcHealPctCritIncoming:
+			if (bottype == BotfocusFcHealPctCritIncoming)
+				value = focus_spell.base[i];
+			break;
+
+		case SE_FcHealAmtCrit:
+			if(bottype == BotfocusFcHealAmtCrit)
+				value = focus_spell.base[i];
+			break;
+
+		case  SE_FcHealAmt:
+			if(bottype == BotfocusFcHealAmt)
+				value = focus_spell.base[i];
+			break;
+
+		case SE_FcHealPctIncoming:
+			if(bottype == BotfocusFcHealPctIncoming)
+				value = focus_spell.base[i];
+			break;
+
+		case SE_FcBaseEffects:
 		{
-			if(bottype == BotfocusAdditionalDamage)
+			if (bottype == BotfocusFcBaseEffects)
+				value = focus_spell.base[i];
+
+			break;
+		}
+		case SE_FcDamagePctCrit:
+		{
+			if(bottype == BotfocusFcDamagePctCrit)
 				value = focus_spell.base[i];
 
 			break;
 		}
 
-		case SE_CriticalHealRate:
-		{
-			if (bottype == BotfocusCriticalHealRate)
-				value = focus_spell.base[i];
-
-			break;
-		}
-
-		case SE_AdditionalHeal:
-		{
-			if(bottype == BotfocusAdditionalHeal)
-				value = focus_spell.base[i];
-
-			break;
-		}
-
-		case SE_AdditionalHeal2:
-		{
-			if(bottype == BotfocusAdditionalHeal2)
-				value = focus_spell.base[i];
-
-			break;
-		}
-
-		case SE_HealRate2:
-		{
-			if(bottype == BotfocusHealRate)
-				value = focus_spell.base[i];
-
-			break;
-		}
-
-		case SE_IncreaseSpellPower:
-		{
-			if (bottype == BotfocusSpellEffectiveness)
-				value = focus_spell.base[i];
-
-			break;
-		}
-		case SE_ImprovedDamage2:
-		{
-			if(bottype == BotfocusImprovedDamage2)
-				value = focus_spell.base[i];
-
-			break;
-		}
-
-		case SE_IncreaseNumHits:
+		case SE_FcIncreaseNumHits:
 		{
 			if(bottype == BotfocusIncreaseNumHits)
 				value = focus_spell.base[i];
@@ -7748,16 +7705,11 @@ int16 Bot::CalcBotFocusEffect(BotfocusType bottype, uint16 focus_id, uint16 spel
 }
 
 //proc chance includes proc bonus
-float Bot::GetProcChances(float &ProcBonus, float &ProcChance, uint16 weapon_speed, uint16 hand) {
+float Bot::GetProcChances(float ProcBonus, uint16 weapon_speed, uint16 hand) {
 	int mydex = GetDEX();
-	float AABonus = 0;
-	ProcBonus = 0;
-	ProcChance = 0;
+	float ProcChance = 0.0f;
 
-	if (aabonuses.ProcChance)
-		AABonus = float(aabonuses.ProcChance) / 100.0f;
-
-	switch(hand){
+	switch (hand) {
 		case SLOT_PRIMARY:
 			weapon_speed = attack_timer.GetDuration();
 			break;
@@ -7769,24 +7721,20 @@ float Bot::GetProcChances(float &ProcBonus, float &ProcChance, uint16 weapon_spe
 			break;
 	}
 
-
 	//calculate the weapon speed in ms, so we can use the rule to compare against.
-
-	if(weapon_speed < RuleI(Combat, MinHastedDelay)) // fast as a client can swing, so should be the floor of the proc chance
+	// fast as a client can swing, so should be the floor of the proc chance
+	if (weapon_speed < RuleI(Combat, MinHastedDelay))
 		weapon_speed = RuleI(Combat, MinHastedDelay);
 
-	ProcBonus += (float(itembonuses.ProcChance + spellbonuses.ProcChance) / 1000.0f + AABonus);
-
-	if(RuleB(Combat, AdjustProcPerMinute) == true)
-	{
-		ProcChance = ((float)weapon_speed * RuleR(Combat, AvgProcsPerMinute) / 60000.0f); // compensate for weapon_speed being in ms
-		ProcBonus += float(mydex) * RuleR(Combat, ProcPerMinDexContrib) / 100.0f;
-		ProcChance = ProcChance + (ProcChance * ProcBonus);
-	}
-	else
-	{
-		ProcChance = RuleR(Combat, BaseProcChance) + float(mydex) / RuleR(Combat, ProcDexDivideBy);
-		ProcChance = ProcChance + (ProcChance * ProcBonus);
+	if (RuleB(Combat, AdjustProcPerMinute)) {
+		ProcChance = (static_cast<float>(weapon_speed) *
+				RuleR(Combat, AvgProcsPerMinute) / 60000.0f); // compensate for weapon_speed being in ms
+		ProcBonus += static_cast<float>(mydex) * RuleR(Combat, ProcPerMinDexContrib);
+		ProcChance += ProcChance * ProcBonus / 100.0f;
+	} else {
+		ProcChance = RuleR(Combat, BaseProcChance) +
+			static_cast<float>(mydex) / RuleR(Combat, ProcDexDivideBy);
+		ProcChance += ProcChance*ProcBonus / 100.0f;
 	}
 
 	mlog(COMBAT__PROCS, "Proc chance %.2f (%.2f from bonuses)", ProcChance, ProcBonus);
@@ -7835,7 +7783,7 @@ bool Bot::AvoidDamage(Mob* other, int32 &damage, bool CanRiposte)
 	if (CanRiposte && damage > 0 && CanThisClassRiposte() && !other->BehindMob(this, other->GetX(), other->GetY()))
 	{
 		riposte_chance = (100.0f + (float)defender->GetAABonuses().RiposteChance + (float)defender->GetSpellBonuses().RiposteChance + (float)defender->GetItemBonuses().RiposteChance) / 100.0f;
-		skill = GetSkill(RIPOSTE);
+		skill = GetSkill(SkillRiposte);
 
 		if (!ghit) {	//if they are not using a garunteed hit discipline
 			bonus = 2.0 + skill/60.0 + (GetDEX()/200);
@@ -7871,7 +7819,7 @@ bool Bot::AvoidDamage(Mob* other, int32 &damage, bool CanRiposte)
 	float block_chance = 0.0f;
 	if (damage > 0 && CanThisClassBlock() && (!other->BehindMob(this, other->GetX(), other->GetY()) || bBlockFromRear)) {
 		block_chance = (100.0f + (float)spellbonuses.IncreaseBlockChance + (float)itembonuses.IncreaseBlockChance) / 100.0f;
-		skill = GetSkill(BLOCKSKILL);
+		skill = GetSkill(SkillBlock);
 
 		if (!ghit) {	//if they are not using a garunteed hit discipline
 			bonus = 2.0 + skill/35.0 + (GetDEX()/200);
@@ -7904,7 +7852,7 @@ bool Bot::AvoidDamage(Mob* other, int32 &damage, bool CanRiposte)
 		if(equiped2) {
 			uint8 TwoHandBlunt = GetBotItem(SLOT_PRIMARY)->GetItem()->ItemType;
 			float bonusStaffBlock = 0.0f;
-			if(TwoHandBlunt == ItemType2HB) {
+			if(TwoHandBlunt == ItemType2HBlunt) {
 
 				bonusStaffBlock = aabonuses.TwoHandBluntBlock + spellbonuses.TwoHandBluntBlock + itembonuses.TwoHandBluntBlock;
 				RollTable[1] = RollTable[0] + bonusStaffBlock;
@@ -7919,7 +7867,7 @@ bool Bot::AvoidDamage(Mob* other, int32 &damage, bool CanRiposte)
 	if (damage > 0 && CanThisClassParry() && !other->BehindMob(this, other->GetX(), other->GetY()))
 	{
 		parry_chance = (100.0f + (float)defender->GetSpellBonuses().ParryChance + (float)defender->GetItemBonuses().ParryChance) / 100.0f;
-		skill = GetSkill(PARRY);
+		skill = GetSkill(SkillParry);
 
 		if (!ghit) {	//if they are not using a garunteed hit discipline
 			bonus = 2.0 + skill/60.0 + (GetDEX()/200);
@@ -7938,7 +7886,7 @@ bool Bot::AvoidDamage(Mob* other, int32 &damage, bool CanRiposte)
 	if (damage > 0 && CanThisClassDodge() && !other->BehindMob(this, other->GetX(), other->GetY()))
 	{
 		dodge_chance = (100.0f + (float)defender->GetSpellBonuses().DodgeChance + (float)defender->GetItemBonuses().DodgeChance) / 100.0f;
-		skill = GetSkill(DODGE);
+		skill = GetSkill(SkillDodge);
 
 		if (!ghit) {	//if they are not using a garunteed hit discipline
 			bonus = 2.0 + skill/60.0 + (GetAGI()/200);
@@ -7988,7 +7936,7 @@ int Bot::GetMonkHandToHandDamage(void)
 		// Have a look to see if we have epic fists on
 
 		uint32 botWeaponId = INVALID_ID;
-		botWeaponId = CastToNPC()->GetEquipment(MATERIAL_HANDS);
+		botWeaponId = CastToNPC()->GetEquipment(MaterialHands);
 		if(botWeaponId == 10652) { //Monk Epic ID
 			return 9;
 		}
@@ -8008,7 +7956,7 @@ int Bot::GetMonkHandToHandDamage(void)
 			return damage[Level];
 }
 
-bool Bot::TryFinishingBlow(Mob *defender, SkillType skillinuse)
+bool Bot::TryFinishingBlow(Mob *defender, SkillUseTypes skillinuse)
 {
 	if (!defender)
 		return false;
@@ -8065,7 +8013,7 @@ void Bot::DoRiposte(Mob* defender) {
 	}
 }
 
-void Bot::DoSpecialAttackDamage(Mob *who, SkillType skill, int32 max_damage, int32 min_damage, int32 hate_override,int ReuseTime, bool HitChance) {
+void Bot::DoSpecialAttackDamage(Mob *who, SkillUseTypes skill, int32 max_damage, int32 min_damage, int32 hate_override,int ReuseTime, bool HitChance) {
 	//this really should go through the same code as normal melee damage to
 	//pick up all the special behavior there
 
@@ -8073,7 +8021,7 @@ void Bot::DoSpecialAttackDamage(Mob *who, SkillType skill, int32 max_damage, int
 	if(hate_override > -1)
 		hate = hate_override;
 
-	if(skill == BASH) {
+	if(skill == SkillBash) {
 		const ItemInst* inst = GetBotItem(SLOT_SECONDARY);
 		const Item_Struct* botweapon = 0;
 		if(inst)
@@ -8093,7 +8041,7 @@ void Bot::DoSpecialAttackDamage(Mob *who, SkillType skill, int32 max_damage, int
 
 	else{
 		bool CanRiposte = true;
-		if(skill == THROWING && skill == ARCHERY)
+		if(skill == SkillThrowing || skill == SkillArchery) // changed from '&&'
 			CanRiposte = false;
 
 		who->AvoidDamage(this, max_damage, CanRiposte);
@@ -8101,7 +8049,7 @@ void Bot::DoSpecialAttackDamage(Mob *who, SkillType skill, int32 max_damage, int
 
 		if(max_damage > 0) {
 			ApplyMeleeDamageBonus(skill, max_damage);
-			max_damage += who->GetAdditionalDamage(this, 0, true, skill);
+			max_damage += who->GetFcDamageAmtIncoming(this, 0, true, skill);
 			max_damage += (itembonuses.HeroicSTR / 10) + (max_damage * who->GetSkillDmgTaken(skill) / 100) + GetSkillDmgAmt(skill);
 			TryCriticalHit(who, skill, max_damage);
 		}
@@ -8114,6 +8062,9 @@ void Bot::DoSpecialAttackDamage(Mob *who, SkillType skill, int32 max_damage, int
 
 	if(!GetTarget())return;
 	if (HasDied())	return;
+
+	if (max_damage > 0)
+		CheckNumHitsRemaining(5);
 
 	//[AA Dragon Punch] value[0] = 100 for 25%, chance value[1] = skill
 	if(aabonuses.SpecialAttackKBProc[0] && aabonuses.SpecialAttackKBProc[1] == skill){
@@ -8145,7 +8096,7 @@ void Bot::TryBackstab(Mob *other, int ReuseTime) {
 	const Item_Struct* botpiercer = nullptr;
 	if(inst)
 		botpiercer = inst->GetItem();
-	if(!botpiercer || (botpiercer->ItemType != ItemTypePierce)) {
+	if(!botpiercer || (botpiercer->ItemType != ItemType1HPiercing)) {
 		Say("I can't backstab with this weapon!");
 		return;
 	}
@@ -8182,7 +8133,7 @@ void Bot::TryBackstab(Mob *other, int ReuseTime) {
 		else {
 			RogueBackstab(other);
 			if (level > 54) {
-				float DoubleAttackProbability = (GetSkill(DOUBLE_ATTACK) + GetLevel()) / 500.0f; // 62.4 max
+				float DoubleAttackProbability = (GetSkill(SkillDoubleAttack) + GetLevel()) / 500.0f; // 62.4 max
 				// Check for double attack with main hand assuming maxed DA Skill (MS)
 
 				if(MakeRandomFloat(0, 1) < DoubleAttackProbability)	// Max 62.4 % chance of DA
@@ -8202,7 +8153,7 @@ void Bot::TryBackstab(Mob *other, int ReuseTime) {
 		//we can stab from any angle, we do min damage though.
 		RogueBackstab(other, true);
 		if (level > 54) {
-			float DoubleAttackProbability = (GetSkill(DOUBLE_ATTACK) + GetLevel()) / 500.0f; // 62.4 max
+			float DoubleAttackProbability = (GetSkill(SkillDoubleAttack) + GetLevel()) / 500.0f; // 62.4 max
 			// Check for double attack with main hand assuming maxed DA Skill (MS)
 			if(MakeRandomFloat(0, 1) < DoubleAttackProbability)		// Max 62.4 % chance of DA
 				if(other->GetHP() > 0)
@@ -8248,12 +8199,12 @@ void Bot::RogueBackstab(Mob* other, bool min_damage, int ReuseTime)
 
 	if(primaryweapondamage > 0){
 		if(level > 25){
-			max_hit = (((2*backstab_dmg) * GetDamageTable(BACKSTAB) / 100) * 10 * GetSkill(BACKSTAB) / 355) + ((level-25)/3) + 1;
-			hate = 20 * backstab_dmg * GetSkill(BACKSTAB) / 355;
+			max_hit = (((2*backstab_dmg) * GetDamageTable(SkillBackstab) / 100) * 10 * GetSkill(SkillBackstab) / 355) + ((level-25)/3) + 1;
+			hate = 20 * backstab_dmg * GetSkill(SkillBackstab) / 355;
 		}
 		else{
-			max_hit = (((2*backstab_dmg) * GetDamageTable(BACKSTAB) / 100) * 10 * GetSkill(BACKSTAB) / 355) + 1;
-			hate = 20 * backstab_dmg * GetSkill(BACKSTAB) / 355;
+			max_hit = (((2*backstab_dmg) * GetDamageTable(SkillBackstab) / 100) * 10 * GetSkill(SkillBackstab) / 355) + 1;
+			hate = 20 * backstab_dmg * GetSkill(SkillBackstab) / 355;
 		}
 
 		// determine minimum hits
@@ -8267,7 +8218,7 @@ void Bot::RogueBackstab(Mob* other, bool min_damage, int ReuseTime)
 			min_hit = (level * ( level*5 - 105)) / 100;
 		}
 
-		if(!other->CheckHitChance(this, BACKSTAB, 0))	{
+		if(!other->CheckHitChance(this, SkillBackstab, 0))	{
 			ndamage = 0;
 		}
 		else{
@@ -8291,7 +8242,7 @@ void Bot::RogueBackstab(Mob* other, bool min_damage, int ReuseTime)
 		ndamage = -5;
 	}
 
-	DoSpecialAttackDamage(other, BACKSTAB, ndamage, min_hit, hate, ReuseTime);
+	DoSpecialAttackDamage(other, SkillBackstab, ndamage, min_hit, hate, ReuseTime);
 	DoAnim(animPiercing);
 }
 
@@ -8300,10 +8251,10 @@ void Bot::RogueAssassinate(Mob* other)
 	ItemInst* botweaponInst = GetBotItem(SLOT_PRIMARY);
 	if(botweaponInst) {
 		if(GetWeaponDamage(other, botweaponInst)) {
-			other->Damage(this, 32000, SPELL_UNKNOWN, BACKSTAB);
+			other->Damage(this, 32000, SPELL_UNKNOWN, SkillBackstab);
 		}
 		else {
-			other->Damage(this, -5, SPELL_UNKNOWN, BACKSTAB);
+			other->Damage(this, -5, SPELL_UNKNOWN, SkillBackstab);
 		}
 	}
 
@@ -8388,26 +8339,26 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 			bool canBash = false;
 			if((GetRace() == OGRE || GetRace() == TROLL || GetRace() == BARBARIAN) // Racial Slam
 						|| (m_inv.GetItem(SLOT_SECONDARY) && m_inv.GetItem(SLOT_SECONDARY)->GetItem()->ItemType == ItemTypeShield) //Using Shield
-						|| (m_inv.GetItem(SLOT_PRIMARY) && (m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HS
-							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HB
-							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HPierce)
+						|| (m_inv.GetItem(SLOT_PRIMARY) && (m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HSlash
+							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HBlunt
+							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HPiercing)
 							&& GetAA(aa2HandBash) >= 1)) { //Using 2 hand weapon, but has AA 2 Hand Bash
 				canBash = true;
 			}
 
 			if(!canBash || MakeRandomInt(0, 100) > 25) { //tested on live, warrior mobs both kick and bash, kick about 75% of the time, casting doesn't seem to make a difference.
-				skill_to_use = KICK;
+				skill_to_use = SkillKick;
 			}
 			else {
-				skill_to_use = BASH;
+				skill_to_use = SkillBash;
 			}
 		}
 	case RANGER:
 	case BEASTLORD:
-		skill_to_use = KICK;
+		skill_to_use = SkillKick;
 		break;
 	case BERSERKER:
-		skill_to_use = FRENZY;
+		skill_to_use = SkillFrenzy;
 		break;
 	case CLERIC:
 	case SHADOWKNIGHT:
@@ -8415,42 +8366,42 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 		if(level >= RuleI(Combat, NPCBashKickLevel)){
 			if((GetRace() == OGRE || GetRace() == TROLL || GetRace() == BARBARIAN) // Racial Slam
 						|| (m_inv.GetItem(SLOT_SECONDARY) && m_inv.GetItem(SLOT_SECONDARY)->GetItem()->ItemType == ItemTypeShield) //Using Shield
-						|| (m_inv.GetItem(SLOT_PRIMARY) && (m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HS
-							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HB
-							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HPierce)
+						|| (m_inv.GetItem(SLOT_PRIMARY) && (m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HSlash
+							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HBlunt
+							|| m_inv.GetItem(SLOT_PRIMARY)->GetItem()->ItemType == ItemType2HPiercing)
 							&& GetAA(aa2HandBash) >= 1)) { //Using 2 hand weapon, but has AA 2 Hand Bash
-				skill_to_use = BASH;
+				skill_to_use = SkillBash;
 			}
 		}
 		break;
 	case MONK:
 		if(GetLevel() >= 30)
 		{
-			skill_to_use = FLYING_KICK;
+			skill_to_use = SkillFlyingKick;
 		}
 		else if(GetLevel() >= 25)
 		{
-			skill_to_use = DRAGON_PUNCH;
+			skill_to_use = SkillDragonPunch;
 		}
 		else if(GetLevel() >= 20)
 		{
-			skill_to_use = EAGLE_STRIKE;
+			skill_to_use = SkillEagleStrike;
 		}
 		else if(GetLevel() >= 10)
 		{
-			skill_to_use = TIGER_CLAW;
+			skill_to_use = SkillTigerClaw;
 		}
 		else if(GetLevel() >= 5)
 		{
-			skill_to_use = ROUND_KICK;
+			skill_to_use = SkillRoundKick;
 		}
 		else
 		{
-			skill_to_use = KICK;
+			skill_to_use = SkillKick;
 		}
 		break;
 	case ROGUE:
-		skill_to_use = BACKSTAB;
+		skill_to_use = SkillBackstab;
 		break;
 	}
 
@@ -8458,7 +8409,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 		return;
 
 
-	if(skill_to_use == BASH)
+	if(skill_to_use == SkillBash)
 	{
 		if (target!=this)
 		{
@@ -8469,7 +8420,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 				dmg = -5;
 			}
 			else{
-				if(!target->CheckHitChance(this, BASH, 0)) {
+				if(!target->CheckHitChance(this, SkillBash, 0)) {
 					dmg = 0;
 				}
 				else{
@@ -8484,7 +8435,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 			reuse = BashReuseTime * 1000;
 			//reuse = (reuse*HasteModifier)/100;
 
-			DoSpecialAttackDamage(target, BASH, dmg, 1,-1,reuse);
+			DoSpecialAttackDamage(target, SkillBash, dmg, 1,-1,reuse);
 
 			did_attack = true;
 
@@ -8495,13 +8446,13 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 		}
 	}
 
-	if(skill_to_use == FRENZY)
+	if(skill_to_use == SkillFrenzy)
 	{
 		int AtkRounds = 3;
 		int skillmod = 0;
 
-		if(MaxSkill(FRENZY) > 0)
-			skillmod = 100*GetSkill(FRENZY)/MaxSkill(FRENZY);
+		if(MaxSkill(SkillFrenzy) > 0)
+			skillmod = 100*GetSkill(SkillFrenzy)/MaxSkill(SkillFrenzy);
 
 		int32 max_dmg = (26 + ((((GetLevel()-6) * 2)*skillmod)/100)) * ((100+RuleI(Combat, FrenzyBonus))/100);
 		int32 min_dmg = 0;
@@ -8524,7 +8475,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 		while(AtkRounds > 0) {
 
 			if (GetTarget() && (AtkRounds == 1 || MakeRandomInt(0,100) < 75)){
-				DoSpecialAttackDamage(GetTarget(), FRENZY, max_dmg, min_dmg, max_dmg , reuse, true);
+				DoSpecialAttackDamage(GetTarget(), SkillFrenzy, max_dmg, min_dmg, max_dmg , reuse, true);
 			}
 			AtkRounds--;
 		}
@@ -8534,7 +8485,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 		}
 	}
 
-	if(skill_to_use == KICK)
+	if(skill_to_use == SkillKick)
 	{
 		if(target!=this)
 		{
@@ -8544,7 +8495,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 				dmg = -5;
 			}
 			else{
-				if(!target->CheckHitChance(this, KICK, 0)) {
+				if(!target->CheckHitChance(this, SkillKick, 0)) {
 					dmg = 0;
 				}
 				else{
@@ -8557,17 +8508,17 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 
 			reuse = KickReuseTime * 1000;
 
-			DoSpecialAttackDamage(target, KICK, dmg, 1,-1, reuse);
+			DoSpecialAttackDamage(target, SkillKick, dmg, 1,-1, reuse);
 
 			did_attack = true;
 		}
 	}
 
-	if(skill_to_use == FLYING_KICK ||
-		skill_to_use == DRAGON_PUNCH ||
-		skill_to_use == EAGLE_STRIKE ||
-		skill_to_use == TIGER_CLAW ||
-		skill_to_use == ROUND_KICK)
+	if(skill_to_use == SkillFlyingKick ||
+		skill_to_use == SkillDragonPunch ||
+		skill_to_use == SkillEagleStrike ||
+		skill_to_use == SkillTigerClaw ||
+		skill_to_use == SkillRoundKick)
 	{
 		reuse = MonkSpecialAttack(target, skill_to_use) - 1;
 		MonkSpecialAttack(target, skill_to_use);
@@ -8576,7 +8527,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 		uint16 bDoubleSpecialAttack = itembonuses.DoubleSpecialAttack + spellbonuses.DoubleSpecialAttack + aabonuses.DoubleSpecialAttack;
 		if( bDoubleSpecialAttack && (bDoubleSpecialAttack >= 100 || bDoubleSpecialAttack > MakeRandomInt(0,100))) {
 
-			int MonkSPA [5] = { FLYING_KICK, DRAGON_PUNCH, EAGLE_STRIKE, TIGER_CLAW, ROUND_KICK };
+			int MonkSPA [5] = { SkillFlyingKick, SkillDragonPunch, SkillEagleStrike, SkillTigerClaw, SkillRoundKick };
 			MonkSpecialAttack(target, MonkSPA[MakeRandomInt(0,4)]);
 
 			int TripleChance = 25;
@@ -8593,7 +8544,7 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 		did_attack = true;
 	}
 
-	if(skill_to_use == BACKSTAB)
+	if(skill_to_use == SkillBackstab)
 	{
 		reuse = BackstabReuseTime * 1000;
 		did_attack = true;
@@ -8607,10 +8558,10 @@ void Bot::DoClassAttacks(Mob *target, bool IsRiposte) {
 	classattack_timer.Start(reuse*HasteModifier/100);
 }
 
-bool Bot::TryHeadShot(Mob* defender, SkillType skillInUse) {
+bool Bot::TryHeadShot(Mob* defender, SkillUseTypes skillInUse) {
 	bool Result = false;
 
-	if(defender && (defender->GetBodyType() == BT_Humanoid) && (skillInUse == ARCHERY) && (GetClass() == RANGER) && (GetLevel() >= 62)) {
+	if(defender && (defender->GetBodyType() == BT_Humanoid) && (skillInUse == SkillArchery) && (GetClass() == RANGER) && (GetLevel() >= 62)) {
 		int defenderLevel = defender->GetLevel();
 		int rangerLevel = GetLevel();
 		// Bot Ranger Headshot AA through level 85(Underfoot)
@@ -8669,8 +8620,6 @@ void Bot::AI_Stop() {
 //iOther the mob who is doing the looking. It should figure out
 //what iOther thinks about 'this'
 FACTION_VALUE Bot::GetReverseFactionCon(Mob* iOther) {
-	_ZP(Bot_GetReverseFactionCon);
-
 	if(iOther->IsBot()) {
 		return FACTION_ALLY;
 	}
@@ -8821,7 +8770,7 @@ void Bot::BotOrderCampAll(Client* c) {
 	if(c) {
 		std::list<Bot*> BotList = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
-		for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); botListItr++) {
+		for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); ++botListItr) {
 			(*botListItr)->Camp();
 		}
 	}
@@ -9036,16 +8985,16 @@ void Bot::SetAttackTimer() {
 			//if we have a 2H weapon in our main hand, no dual
 			if(PrimaryWeapon != nullptr) {
 				if(	PrimaryWeapon->ItemClass == ItemClassCommon
-					&& (PrimaryWeapon->ItemType == ItemType2HS
-					||	PrimaryWeapon->ItemType == ItemType2HB
-					||	PrimaryWeapon->ItemType == ItemType2HPierce)) {
+					&& (PrimaryWeapon->ItemType == ItemType2HSlash
+					||	PrimaryWeapon->ItemType == ItemType2HBlunt
+					||	PrimaryWeapon->ItemType == ItemType2HPiercing)) {
 						attack_dw_timer.Disable();
 						continue;
 				}
 			}
 
 			//clients must have the skill to use it...
-			if(!GetSkill(DUAL_WIELD)) {
+			if(!GetSkill(SkillDualWield)) {
 				attack_dw_timer.Disable();
 				continue;
 			}
@@ -9061,7 +9010,7 @@ void Bot::SetAttackTimer() {
 					ItemToUse = nullptr;
 			}
 			// Check to see if skill is valid
-			else if((ItemToUse->ItemType > ItemTypeThrowing) && (ItemToUse->ItemType != ItemTypeHand2Hand) && (ItemToUse->ItemType != ItemType2HPierce)) {
+			else if((ItemToUse->ItemType > ItemTypeLargeThrowing) && (ItemToUse->ItemType != ItemTypeMartial) && (ItemToUse->ItemType != ItemType2HPiercing)) {
 				//no weapon
 				ItemToUse = nullptr;
 			}
@@ -9097,7 +9046,7 @@ void Bot::SetAttackTimer() {
 			if(speed < RuleI(Combat, MinHastedDelay))
 				speed = RuleI(Combat, MinHastedDelay);
 
-			if(ItemToUse && (ItemToUse->ItemType == ItemTypeBow || ItemToUse->ItemType == ItemTypeThrowing))
+			if(ItemToUse && (ItemToUse->ItemType == ItemTypeBow || ItemToUse->ItemType == ItemTypeLargeThrowing))
 			{
 				/*if(IsClient())
 				{
@@ -9131,200 +9080,157 @@ void Bot::SetAttackTimer() {
 	}
 }
 
-int32 Bot::Additional_SpellDmg(uint16 spell_id, bool bufftick)
-{
-	int32 spell_dmg = 0;
-	spell_dmg += GetBotFocusEffect(BotfocusFF_Damage_Amount, spell_id);
-	spell_dmg += GetBotFocusEffect(BotfocusSpellDamage, spell_id);
+int32 Bot::GetActSpellDamage(uint16 spell_id, int32 value, Mob* target) {
+	
+	if (spells[spell_id].targettype == ST_Self)
+		return value;
 
-	//For DOTs you need to apply the damage over the duration of the dot to each tick (this is how live did it)
-	if (bufftick){
-		int duration = CalcBuffDuration(this, this, spell_id);
-		if (duration > 0)
-			return spell_dmg /= duration;
-		else
-			return 0;
-	}
-	return spell_dmg;
-}
+	bool Critical = false;
+	int32 value_BaseEffect = 0;
 
-int32 Bot::GetActSpellDamage(uint16 spell_id, int32 value) {
-	// Important variables:
-	// value: the actual damage after resists, passed from Mob::SpellEffect
-	// modifier: modifier to damage (from spells & focus effects?)
-	// ratio: % of the modifier to apply (from AAs & natural bonus?)
-	// chance: critital chance %
-
-	int32 modifier = 100;
-	int16 spell_dmg = 0;
-
-	//Dunno if this makes sense:
-	if (spells[spell_id].resisttype > 0)
-		modifier += GetBotFocusEffect((BotfocusType)(0-spells[spell_id].resisttype), spell_id);
-
-
-	int tt = spells[spell_id].targettype;
-	if (tt == ST_UndeadAE || tt == ST_Undead || tt == ST_Summoned) {
-		//undead/summoned spells
-		modifier += GetBotFocusEffect(BotfocusImprovedUndeadDamage, spell_id);
-	} else {
-		//damage spells.
-		modifier += GetBotFocusEffect(BotfocusImprovedDamage, spell_id);
-		modifier += GetBotFocusEffect(BotfocusSpellEffectiveness, spell_id);
-		modifier += GetBotFocusEffect(BotfocusImprovedDamage2, spell_id);
-	}
+	value_BaseEffect = value + (value*GetBotFocusEffect(BotfocusFcBaseEffects, spell_id)/100);
 
 	// Need to scale HT damage differently after level 40! It no longer scales by the constant value in the spell file. It scales differently, instead of 10 more damage per level, it does 30 more damage per level. So we multiply the level minus 40 times 20 if they are over level 40.
-	if ( spell_id == SPELL_HARM_TOUCH || spell_id == SPELL_HARM_TOUCH2 || spell_id == SPELL_IMP_HARM_TOUCH ) {
-		if (this->GetLevel() > 40)
-			value -= (this->GetLevel() - 40) * 20;
-	}
-
+	if ( (spell_id == SPELL_HARM_TOUCH || spell_id == SPELL_HARM_TOUCH2 || spell_id == SPELL_IMP_HARM_TOUCH ) && GetLevel() > 40)
+		value -= (GetLevel() - 40) * 20;
+       
 	//This adds the extra damage from the AA Unholy Touch, 450 per level to the AA Improved Harm TOuch.
-	if (spell_id == SPELL_IMP_HARM_TOUCH) { //Improved Harm Touch
-			value -= GetAA(aaUnholyTouch) * 450; //Unholy Touch
-	}
-
-	//these spell IDs could be wrong
-	if (spell_id == SPELL_LEECH_TOUCH) {	//leech touch
-		value -= GetAA(aaConsumptionoftheSoul) * 200; //Consumption of the Soul
-		value -= GetAA(aaImprovedConsumptionofSoul) * 200; //Improved Consumption of the Soul
-	}
-
-	//spell crits, dont make sense if cast on self.
-	if(tt != ST_Self) {
-		// item SpellDmg bonus
-		// Formula = SpellDmg * (casttime + recastime) / 7; Cant trigger off spell less than 5 levels below and cant cause more dmg than the spell itself.
-		if(this->itembonuses.SpellDmg && spells[spell_id].classes[(GetClass()%16) - 1] >= GetLevel() - 5) {
-			spell_dmg = this->itembonuses.SpellDmg * (spells[spell_id].cast_time + spells[spell_id].recast_time) / 7000;
-			if(spell_dmg > -value)
-				spell_dmg = -value;
-		}
-
-		// Spell-based SpellDmg adds directly but it restricted by focuses.
-		spell_dmg += Additional_SpellDmg(spell_id);
-
-		int chance = RuleI(Spells, BaseCritChance);
-		int32 ratio = RuleI(Spells, BaseCritRatio);
-
+	if (spell_id == SPELL_IMP_HARM_TOUCH) //Improved Harm Touch
+		value -= GetAA(aaUnholyTouch) * 450; //Unholy Touch
+        
+	int chance = RuleI(Spells, BaseCritChance);
 		chance += itembonuses.CriticalSpellChance + spellbonuses.CriticalSpellChance + aabonuses.CriticalSpellChance;
-		ratio += itembonuses.SpellCritDmgIncrease + spellbonuses.SpellCritDmgIncrease + aabonuses.SpellCritDmgIncrease;
-
-		if(GetClass() == WIZARD) {
-			if (GetLevel() >= RuleI(Spells, WizCritLevel)) {
-				chance += RuleI(Spells, WizCritChance);
-				ratio += RuleI(Spells, WizCritRatio);
-			}
-			if(aabonuses.SpellCritDmgIncrease > 0) // wizards get an additional bonus
-				ratio += aabonuses.SpellCritDmgIncrease * 1.5; //108%, 115%, 124%, close to Graffe's 207%, 215%, & 225%
-		}
+		
+	if (chance > 0){
+ 
+		 int32 ratio = RuleI(Spells, BaseCritRatio); //Critical modifier is applied from spell effects only. Keep at 100 for live like criticals.
 
 		//Improved Harm Touch is a guaranteed crit if you have at least one level of SCF.
-		if (spell_id == SPELL_IMP_HARM_TOUCH) {
-			if ( (GetAA(aaSpellCastingFury) > 0) && (GetAA(aaUnholyTouch) > 0) )
-				chance = 100;
+		 if (spell_id == SPELL_IMP_HARM_TOUCH && (GetAA(aaSpellCastingFury) > 0) && (GetAA(aaUnholyTouch) > 0))
+			 chance = 100;
+ 
+		 if (MakeRandomInt(1,100) <= chance){
+			Critical = true;
+			ratio += itembonuses.SpellCritDmgIncrease + spellbonuses.SpellCritDmgIncrease + aabonuses.SpellCritDmgIncrease;
+			ratio += itembonuses.SpellCritDmgIncNoStack + spellbonuses.SpellCritDmgIncNoStack + aabonuses.SpellCritDmgIncNoStack;
 		}
 
-		/*
-		//Handled in aa_effects will focus spells from 'spellgroup=99'. (SK life tap from buff procs)
-		//If you are using an older spell file table (Pre SOF)...
-		//Use SQL optional_EnableSoulAbrasionAA to update your spells table to properly use the effect.
-		//If you do not want to update your table then you may want to enable this.
-		if(tt == ST_Tap) {
-			if(spells[spell_id].classes[SHADOWKNIGHT-1] >= 254 && spell_id != SPELL_LEECH_TOUCH){
-				if(ratio < 100)	//chance increase and ratio are made up, not confirmed
-					ratio = 100;
+		else if (GetClass() == WIZARD && (GetLevel() >= RuleI(Spells, WizCritLevel)) && (MakeRandomInt(1,100) <= RuleI(Spells, WizCritChance))) {
+			ratio = MakeRandomInt(1,100); //Wizard innate critical chance is calculated seperately from spell effect and is not a set ratio.
+			Critical = true;
+		}
 
-				switch (GetAA(aaSoulAbrasion))
-				{
-				case 1:
-					modifier += 100;
-					break;
-				case 2:
-					modifier += 200;
-					break;
-				case 3:
-					modifier += 300;
-					break;
-				}
+		ratio += RuleI(Spells, WizCritRatio); //Default is zero
+			
+		if (Critical){
+
+			value = value_BaseEffect*ratio/100;  
+
+			value += value_BaseEffect*GetBotFocusEffect(BotfocusImprovedDamage, spell_id)/100; 
+
+			value += int(value_BaseEffect*GetBotFocusEffect(BotfocusFcDamagePctCrit, spell_id)/100)*ratio/100;
+
+			if (target) {
+				value += int(value_BaseEffect*target->GetVulnerability(this, spell_id, 0)/100)*ratio/100;  
+				value -= target->GetFcDamageAmtIncoming(this, spell_id); 
 			}
-		}
-		*/
 
-		if (chance > 0) {
-			mlog(SPELLS__CRITS, "Attempting spell crit. Spell: %s (%d), Value: %d, Modifier: %d, Chance: %d, Ratio: %d", spells[spell_id].name, spell_id, value, modifier, chance, ratio);
-			if(MakeRandomInt(0,100) <= chance) {
-				modifier += modifier*ratio/100;
-				spell_dmg *= 2;
-				mlog(SPELLS__CRITS, "Spell crit successful. Final damage modifier: %d, Final Damage: %d", modifier, (value * modifier / 100) - spell_dmg);
-				entity_list.MessageClose(this, false, 100, MT_SpellCrits, "%s delivers a critical blast! (%d)", GetName(), (-value * modifier / 100) + spell_dmg);
-			} else
-				mlog(SPELLS__CRITS, "Spell crit failed. Final Damage Modifier: %d, Final Damage: %d", modifier, (value * modifier / 100) - spell_dmg);
+			value -= GetBotFocusEffect(BotfocusFcDamageAmtCrit, spell_id)*ratio/100; 
+
+			value -= GetBotFocusEffect(BotfocusFcDamageAmt, spell_id); 
+
+			if(itembonuses.SpellDmg && spells[spell_id].classes[(GetClass()%16) - 1] >= GetLevel() - 5)
+				value += GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, value)*ratio/100;
+
+			entity_list.MessageClose(this, false, 100, MT_SpellCrits, "%s delivers a critical blast! (%d)", GetName(), -value);
+
+			return value;
 		}
 	}
 
-	return ((value * modifier / 100) - spell_dmg);
-}
+	 value = value_BaseEffect;
+ 
+	 value += value_BaseEffect*GetBotFocusEffect(BotfocusImprovedDamage, spell_id)/100; 
+	 
+	 value += value_BaseEffect*GetBotFocusEffect(BotfocusFcDamagePctCrit, spell_id)/100;
 
-int32 Bot::Additional_Heal(uint16 spell_id)
-{
-	int32 heal_amt = 0;
+	 if (target) {
+		value += value_BaseEffect*target->GetVulnerability(this, spell_id, 0)/100;
+		value -= target->GetFcDamageAmtIncoming(this, spell_id); 
+	 }
 
-	heal_amt += GetBotFocusEffect(BotfocusAdditionalHeal, spell_id);
-	heal_amt += GetBotFocusEffect(BotfocusAdditionalHeal2, spell_id);
+	 value -= GetBotFocusEffect(BotfocusFcDamageAmtCrit, spell_id); 
 
-	if (heal_amt){
-		int duration = CalcBuffDuration(this, this, spell_id);
-		if (duration > 0)
-			return heal_amt /= duration;
-	}
+	 value -= GetBotFocusEffect(BotfocusFcDamageAmt, spell_id); 
+	 
+	if(itembonuses.SpellDmg && spells[spell_id].classes[(GetClass()%16) - 1] >= GetLevel() - 5)
+         value += GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, value); 
 
-	return heal_amt;
-}
+	return value;
+ }
 
-int32 Bot::GetActSpellHealing(uint16 spell_id, int32 value) {
-	int32 modifier = 100;
-	int16 heal_amt = 0;
-	modifier += GetBotFocusEffect(BotfocusImprovedHeal, spell_id);
-	modifier += GetBotFocusEffect(BotfocusSpellEffectiveness, spell_id);
-	heal_amt += Additional_Heal(spell_id);
-	int chance = 0;
+int32 Bot::GetActSpellHealing(uint16 spell_id, int32 value, Mob* target) {
+	
+	if (target == nullptr)
+		target = this;
 
+	int32 value_BaseEffect = 0;
+	int16 chance = 0;
+	int8 modifier = 1;
+	bool Critical = false;
+		
+	value_BaseEffect = value + (value*GetBotFocusEffect(BotfocusFcBaseEffects, spell_id)/100); 
+		
+	value = value_BaseEffect;
+
+	value += int(value_BaseEffect*GetBotFocusEffect(BotfocusImprovedHeal, spell_id)/100); 
+ 
+	// Instant Heals
 	if(spells[spell_id].buffduration < 1) {
-		uint8 botlevel = GetLevel();
-		uint8 botclass = GetClass();
-		// Formula = HealAmt * (casttime + recastime) / 7; Cant trigger off spell less than 5 levels below and cant heal more than the spell itself.
-		if(this->itembonuses.HealAmt && spells[spell_id].classes[(botclass%16) - 1] >= botlevel - 5) {
-			heal_amt = this->itembonuses.HealAmt * (spells[spell_id].cast_time + spells[spell_id].recast_time) / 7000;
-			if(heal_amt > value)
-				heal_amt = value;
-		}
 
-		// Check for buffs that affect the healrate of the target and critical heal rate of target
-		if(GetTarget()) {
-			value += value * GetHealRate(spell_id) / 100;
-			chance += GetCriticalHealRate(spell_id);
-		}
+		chance += itembonuses.CriticalHealChance + spellbonuses.CriticalHealChance + aabonuses.CriticalHealChance; 
 
-		//Live AA - Healing Gift, Theft of Life
-		chance += itembonuses.CriticalHealChance + spellbonuses.CriticalHealChance + aabonuses.CriticalHealChance;
+		chance += target->GetFocusIncoming(focusFcHealPctCritIncoming, SE_FcHealPctCritIncoming, this, spell_id); 
+						
+		if (spellbonuses.CriticalHealDecay)
+			chance += GetDecayEffectValue(spell_id, SE_CriticalHealDecay); 
+	
+		if(chance && (MakeRandomInt(0,99) < chance)) {
+			Critical = true;
+			modifier = 2; //At present time no critical heal amount modifier SPA exists.
+		}
+		
+		value *= modifier;
+		value += GetBotFocusEffect(BotfocusFcHealAmtCrit, spell_id) * modifier; 
+		value += GetBotFocusEffect(BotfocusFcHealAmt, spell_id); 
+		value += target->GetFocusIncoming(focusFcHealAmtIncoming, SE_FcHealAmtIncoming, this, spell_id); 
 
-		if(MakeRandomInt(0,99) < chance) {
-			entity_list.MessageClose(this, false, 100, MT_SpellCrits, "%s performs an exceptional heal! (%d)", GetName(), ((value * modifier / 50) + heal_amt*2));
-			return ((value * modifier / 50) + heal_amt*2);
-		}
-		else{
-			return ((value * modifier / 100) + heal_amt);
-		}
+		if(itembonuses.HealAmt && spells[spell_id].classes[(GetClass()%16) - 1] >= GetLevel() - 5)
+			value += GetExtraSpellAmt(spell_id, itembonuses.HealAmt, value) * modifier;
+
+		value += value*target->GetHealRate(spell_id, this)/100; 
+
+		if (Critical)
+			entity_list.MessageClose(this, false, 100, MT_SpellCrits, "%s performs an exceptional heal! (%d)", GetName(), value);
+
+		return value;
 	}
-	// Hots
+
+	//Heal over time spells. [Heal Rate and Additional Healing effects do not increase this value]
 	else {
-		chance += itembonuses.CriticalHealChance + spellbonuses.CriticalHealChance + aabonuses.CriticalHealChance;
-		if(MakeRandomInt(0,99) < chance)
-			return ((value * modifier / 50) + heal_amt*2);
+		
+		chance = itembonuses.CriticalHealOverTime + spellbonuses.CriticalHealOverTime + aabonuses.CriticalHealOverTime; 
+
+		chance += target->GetFocusIncoming(focusFcHealPctCritIncoming, SE_FcHealPctCritIncoming, this, spell_id); 
+		
+		if (spellbonuses.CriticalRegenDecay)
+			chance += GetDecayEffectValue(spell_id, SE_CriticalRegenDecay);
+		
+		if(chance && (MakeRandomInt(0,99) < chance))
+			return (value * 2);
 	}
 
-	return ((value * modifier / 100) + heal_amt);
+	return value;
 }
 
 int32 Bot::GetActSpellCasttime(uint16 spell_id, int32 casttime) {
@@ -9339,7 +9245,7 @@ int32 Bot::GetActSpellCasttime(uint16 spell_id, int32 casttime) {
 			|| botclass == PALADIN || botclass == BEASTLORD ))
 		cast_reducer += (GetLevel()-50)*3;
 
-	if((casttime >= 4000) && BeneficialSpell(spell_id) && ((CalcBuffDuration(this,this,spell_id)-1) > 0)) {
+	if((casttime >= 4000) && BeneficialSpell(spell_id) && IsBuffSpell(spell_id)) {
 		switch (GetAA(aaSpellCastingDeftness)) {
 			case 1:
 				cast_reducer += 5;
@@ -9598,7 +9504,6 @@ bool Bot::CastSpell(uint16 spell_id, uint16 target_id, uint16 slot, int32 cast_t
 	bool Result = false;
 
 	if(zone && !zone->IsSpellBlocked(spell_id, GetX(), GetY(), GetZ())) {
-		_ZP(Bot_CastSpell);
 
 		mlog(SPELLS__CASTING, "CastSpell called for spell %s (%d) on entity %d, slot %d, time %d, mana %d, from item slot %d",
 			spells[spell_id].name, spell_id, target_id, slot, cast_time, mana_cost, (item_slot==0xFFFFFFFF)?999:item_slot);
@@ -10620,7 +10525,7 @@ int32 Bot::CalcManaRegen()
 	{
 		BuffFadeBySitModifier();
 		if(botclass != WARRIOR && botclass != MONK && botclass != ROGUE && botclass != BERSERKER) {
-			regen = (((GetSkill(MEDITATE) / 10) + (level - (level / 4))) / 4) + 4;
+			regen = (((GetSkill(SkillMeditate) / 10) + (level - (level / 4))) / 4) + 4;
 			regen += spellbonuses.ManaRegen + itembonuses.ManaRegen;
 		}
 		else
@@ -11206,7 +11111,7 @@ Bot* Bot::GetBotByBotClientOwnerAndBotName(Client* c, std::string botName) {
 		std::list<Bot*> BotList = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
 		if(!BotList.empty()) {
-			for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); botListItr++) {
+			for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); ++botListItr) {
 				if(std::string((*botListItr)->GetCleanName()) == botName) {
 					Result = (*botListItr);
 					break;
@@ -11265,7 +11170,7 @@ void Bot::ProcessClientZoneChange(Client* botOwner) {
 	if(botOwner) {
 		std::list<Bot*> BotList = entity_list.GetBotsByBotOwnerCharacterID(botOwner->CharacterID());
 
-		for(std::list<Bot*>::iterator itr = BotList.begin(); itr != BotList.end(); itr++) {
+		for(std::list<Bot*>::iterator itr = BotList.begin(); itr != BotList.end(); ++itr) {
 			Bot* tempBot = *itr;
 
 			if(tempBot) {
@@ -11440,17 +11345,17 @@ void Bot::CalcItemBonuses()
 						if(itembonuses.haste < itemtmp->Haste)
 							itembonuses.haste = itemtmp->Haste;
 					if(GetClass() == BARD && itemtmp->BardValue != 0) {
-						if(itemtmp->BardType == ItemTypeBrassInstr)
+						if(itemtmp->BardType == ItemTypeBrassInstrument)
 							itembonuses.brassMod += itemtmp->BardValue;
-						else if(itemtmp->BardType == ItemTypeDrumInstr)
+						else if(itemtmp->BardType == ItemTypePercussionInstrument)
 							itembonuses.percussionMod += itemtmp->BardValue;
-						else if(itemtmp->BardType == ItemUseSinging)
+						else if(itemtmp->BardType == ItemTypeSinging)
 							itembonuses.singingMod += itemtmp->BardValue;
-						else if(itemtmp->BardType == ItemTypeStringInstr)
+						else if(itemtmp->BardType == ItemTypeStringedInstrument)
 							itembonuses.stringedMod += itemtmp->BardValue;
-						else if(itemtmp->BardType == ItemTypeWindInstr)
+						else if(itemtmp->BardType == ItemTypeWindInstrument)
 							itembonuses.windMod += itemtmp->BardValue;
-						else if(itemtmp->BardType == ItemUseAllInstruments) {
+						else if(itemtmp->BardType == ItemTypeAllInstrumentTypes) {
 							itembonuses.brassMod += itemtmp->BardValue;
 							itembonuses.percussionMod += itemtmp->BardValue;
 							itembonuses.singingMod += itemtmp->BardValue;
@@ -11524,17 +11429,17 @@ void Bot::CalcItemBonuses()
 				if(itembonuses.haste < itemtmp->Haste)
 					itembonuses.haste = itemtmp->Haste;
 			if(GetClass() == BARD && itemtmp->BardValue != 0) {
-				if(itemtmp->BardType == ItemTypeBrassInstr)
+				if(itemtmp->BardType == ItemTypeBrassInstrument)
 					itembonuses.brassMod += itemtmp->BardValue;
-				else if(itemtmp->BardType == ItemTypeDrumInstr)
+				else if(itemtmp->BardType == ItemTypePercussionInstrument)
 					itembonuses.percussionMod += itemtmp->BardValue;
-				else if(itemtmp->BardType == ItemUseSinging)
+				else if(itemtmp->BardType == ItemTypeSinging)
 					itembonuses.singingMod += itemtmp->BardValue;
-				else if(itemtmp->BardType == ItemTypeStringInstr)
+				else if(itemtmp->BardType == ItemTypeStringedInstrument)
 					itembonuses.stringedMod += itemtmp->BardValue;
-				else if(itemtmp->BardType == ItemTypeWindInstr)
+				else if(itemtmp->BardType == ItemTypeWindInstrument)
 					itembonuses.windMod += itemtmp->BardValue;
-				else if(itemtmp->BardType == ItemUseAllInstruments) {
+				else if(itemtmp->BardType == ItemTypeAllInstrumentTypes) {
 					itembonuses.brassMod += itemtmp->BardValue;
 					itembonuses.percussionMod += itemtmp->BardValue;
 					itembonuses.singingMod += itemtmp->BardValue;
@@ -11582,7 +11487,7 @@ void Bot::CalcBotStats(bool showtext) {
 		// Test Code
 		if(GetClass() == BARD)
 			GetBotOwner()->Message(15, "Bard Skills-- Brass: %i, Percussion: %i, Singing: %i, Stringed: %i, Wind: %i",
-				GetSkill(BRASS_INSTRUMENTS), GetSkill(PERCUSSION_INSTRUMENTS), GetSkill(SINGING), GetSkill(STRINGED_INSTRUMENTS), GetSkill(WIND_INSTRUMENTS));
+				GetSkill(SkillBrassInstruments), GetSkill(SkillPercussionInstruments), GetSkill(SkillSinging), GetSkill(SkillStringedInstruments), GetSkill(SkillWindInstruments));
 	}
 
 	/*if(this->Save())
@@ -11601,11 +11506,11 @@ void Bot::CalcBotStats(bool showtext) {
 		// Test Code
 		if(GetClass() == BARD) {
 			GetBotOwner()->Message(15, "Bard Skills-- Brass: %i, Percussion: %i, Singing: %i, Stringed: %i, Wind: %i",
-				GetSkill(BRASS_INSTRUMENTS) + GetBrassMod(),
-				GetSkill(PERCUSSION_INSTRUMENTS) + GetPercMod(),
-				GetSkill(SINGING) + GetSingMod(),
-				GetSkill(STRINGED_INSTRUMENTS) + GetStringMod(),
-				GetSkill(WIND_INSTRUMENTS) + GetWindMod());
+				GetSkill(SkillBrassInstruments) + GetBrassMod(),
+				GetSkill(SkillPercussionInstruments) + GetPercMod(),
+				GetSkill(SkillSinging) + GetSingMod(),
+				GetSkill(SkillStringedInstruments) + GetStringMod(),
+				GetSkill(SkillWindInstruments) + GetWindMod());
 			GetBotOwner()->Message(15, "Bard Skill Mods-- Brass: %i, Percussion: %i, Singing: %i, Stringed: %i, Wind: %i", GetBrassMod(), GetPercMod(), GetSingMod(), GetStringMod(), GetWindMod());
 		}
 	}
@@ -11702,6 +11607,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 		// c->Message(0, "#bot illusion <bot/client name or target> - Enchanter Bot cast an illusion buff spell on you or your target.");
 		c->Message(0, "#bot pull [<bot name>] [target] - Bot Pulling Target NPC's");
 		c->Message(0, "#bot setinspectmessage - Copies your inspect message to a targeted bot that you own");
+		c->Message(0, "#bot bardoutofcombat [on|off] - Determines wheter bard bots use out of combat songs.");
 		return;
 	}
 
@@ -11969,7 +11875,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 		}
 
 		if(!AvailableBots.empty()) {
-			for(std::list<BotsAvailableList>::iterator TempAvailableBotsList = AvailableBots.begin(); TempAvailableBotsList != AvailableBots.end(); TempAvailableBotsList++) {
+			for(std::list<BotsAvailableList>::iterator TempAvailableBotsList = AvailableBots.begin(); TempAvailableBotsList != AvailableBots.end(); ++TempAvailableBotsList) {
 				if(!listAll && TempAvailableBotsList->BotClass != iClass)
 					continue;
 
@@ -12013,7 +11919,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 			std::list<Bot*> spawnedBots = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
 			if(!spawnedBots.empty()) {
-				for(std::list<Bot*>::iterator botsListItr = spawnedBots.begin(); botsListItr != spawnedBots.end(); botsListItr++) {
+				for(std::list<Bot*>::iterator botsListItr = spawnedBots.begin(); botsListItr != spawnedBots.end(); ++botsListItr) {
 					Bot* tempBot = *botsListItr;
 					if(tempBot) {
 						if(tempBot->GetClass() != WARRIOR && tempBot->GetClass() != MONK && tempBot->GetClass() != BARD && tempBot->GetClass() != BERSERKER && tempBot->GetClass() != ROGUE)
@@ -12244,7 +12150,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 						c->Message(15, "I need something for my %s (Item %i)", equipped[i], i);
 						continue;
 					}
-					if((i == 13) && ((item2->ItemType == ItemType2HS) || (item2->ItemType == ItemType2HB) || (item2->ItemType == ItemType2HPierce))) {
+					if((i == 13) && ((item2->ItemType == ItemType2HSlash) || (item2->ItemType == ItemType2HBlunt) || (item2->ItemType == ItemType2HPiercing))) {
 						is2Hweapon = true;
 					}
 
@@ -13052,7 +12958,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 						pacer->Say("Trying to pacify %s \n", target->GetCleanName());
 
 						if(pacer->Bot_Command_CalmTarget(target)) {
-							if(target->FindType(SE_Lull) || target->FindType(SE_Harmony) || target->FindType(SE_Calm))
+							if(target->FindType(SE_Lull) || target->FindType(SE_Harmony) || target->FindType(SE_InstantHate))
 							//if(pacer->IsPacified(target))
 								c->Message(0, "I have successfully pacified %s.", target->GetCleanName());
 								return;
@@ -13068,7 +12974,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 						pacer->Say("Trying to pacify %s \n", target->GetCleanName());
 
 						if(pacer->Bot_Command_CalmTarget(target)) {
-							if(target->FindType(SE_Lull) || target->FindType(SE_Harmony) || target->FindType(SE_Calm))
+							if(target->FindType(SE_Lull) || target->FindType(SE_Harmony) || target->FindType(SE_InstantHate))
 							//if(pacer->IsPacified(target))
 								c->Message(0, "I have successfully pacified %s.", target->GetCleanName());
 								return;
@@ -14728,7 +14634,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 		}
 
 		if(!botGroupList.empty()) {
-			for(std::list<BotGroupList>::iterator botGroupListItr = botGroupList.begin(); botGroupListItr != botGroupList.end(); botGroupListItr++) {
+			for(std::list<BotGroupList>::iterator botGroupListItr = botGroupList.begin(); botGroupListItr != botGroupList.end(); ++botGroupListItr) {
 				c->Message(0, "Bot Group Name: %s -- Bot Group Leader: %s", botGroupListItr->BotGroupName.c_str(), botGroupListItr->BotGroupLeaderName.c_str());
 			}
 		}
@@ -14868,7 +14774,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 		}
 
 		std::list<BotGroup>::iterator botGroupItr = botGroup.begin();
-		for(botGroupItr; botGroupItr != botGroup.end(); botGroupItr++) {
+		for(botGroupItr; botGroupItr != botGroup.end(); ++botGroupItr) {
 			// Don't try to re-spawn the botgroup's leader.
 			if(botGroupItr->BotID == botGroupLeader->GetBotID()) { continue; }
 
@@ -15061,7 +14967,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 				return;
 			}
 
-			Bot* targetedBot;
+			Bot *targetedBot = nullptr;
 
 			if(c->GetTarget() != nullptr) {
 				if (c->GetTarget()->IsBot() && (c->GetTarget()->CastToBot()->GetBotOwner() == c))
@@ -15070,7 +14976,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 					c->Message(13, "You must target a bot that you own.");
 
 				if(targetedBot) {
-					if(targetedBot->GetSkill(TAUNT) > 0) {
+					if(targetedBot->GetSkill(SkillTaunt) > 0) {
 						if(toggle)
 							taunt = !targetedBot->taunting;
 
@@ -15204,7 +15110,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 				std::list<Bot*> spawnedBots = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
 				if(!spawnedBots.empty()) {
-					for(std::list<Bot*>::iterator botsListItr = spawnedBots.begin(); botsListItr != spawnedBots.end(); botsListItr++) {
+					for(std::list<Bot*>::iterator botsListItr = spawnedBots.begin(); botsListItr != spawnedBots.end(); ++botsListItr) {
 						Bot* tempBot = *botsListItr;
 						if(tempBot) {
 							tempBot->SetGroupMessagesOn(groupMessages);
@@ -15554,7 +15460,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 						return;
 					}
 
-					Mob* target;
+					Mob* target = nullptr;
 					std::string targetName = std::string(sep->arg[4]);
 
 					if(!targetName.empty())
@@ -15644,7 +15550,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 				if(!strcasecmp(sep->arg[3], "all")) {
 					std::list<Bot*> BotList = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
-					for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); botListItr++) {
+					for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); ++botListItr) {
 						Bot* leaderBot = *botListItr;
 						if(leaderBot->GetInHealRotation() && leaderBot->GetHealRotationLeader() == leaderBot) {
 							//start all heal rotations
@@ -15653,7 +15559,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 
 							rotationMemberList = GetBotsInHealRotation(leaderBot);
 
-							for(std::list<Bot*>::iterator rotationMemberItr = rotationMemberList.begin(); rotationMemberItr != rotationMemberList.end(); rotationMemberItr++) {
+							for(std::list<Bot*>::iterator rotationMemberItr = rotationMemberList.begin(); rotationMemberItr != rotationMemberList.end(); ++rotationMemberItr) {
 								Bot* tempBot = *rotationMemberItr;
 
 								if(tempBot) {
@@ -15690,7 +15596,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 
 						botList = GetBotsInHealRotation(leaderBot);
 
-						for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+						for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 							Bot* tempBot = *botListItr;
 
 							if(tempBot) {
@@ -15721,7 +15627,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 				if(!strcasecmp(sep->arg[3], "all")) {
 					std::list<Bot*> BotList = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
-					for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); botListItr++) {
+					for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); ++botListItr) {
 						Bot* leaderBot = *botListItr;
 						if(leaderBot->GetInHealRotation() && leaderBot->GetHealRotationLeader() == leaderBot) {
 							//start all heal rotations
@@ -15729,7 +15635,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 
 							rotationMemberList = GetBotsInHealRotation(leaderBot);
 
-							for(std::list<Bot*>::iterator rotationMemberItr = rotationMemberList.begin(); rotationMemberItr != rotationMemberList.end(); rotationMemberItr++) {
+							for(std::list<Bot*>::iterator rotationMemberItr = rotationMemberList.begin(); rotationMemberItr != rotationMemberList.end(); ++rotationMemberItr) {
 								Bot* tempBot = *rotationMemberItr;
 
 								if(tempBot) {
@@ -15762,7 +15668,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 
 						botList = GetBotsInHealRotation(leaderBot);
 
-						for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+						for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 							Bot* tempBot = *botListItr;
 
 							if(tempBot && tempBot->GetBotOwnerCharacterID() == c->CharacterID()) {
@@ -15794,7 +15700,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 				if(!strcasecmp(sep->arg[3], "all")) {
 					std::list<Bot*> BotList = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
-					for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); botListItr++) {
+					for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); ++botListItr) {
 						Bot* tempBot = *botListItr;
 						if(tempBot->GetInHealRotation() && tempBot->GetHealRotationLeader() == tempBot) {
 							//list leaders and number of bots per rotation
@@ -15825,7 +15731,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 						c->Message(0, "Bot Heal Rotation- Leader: %s", leaderBot->GetCleanName());
 						c->Message(0, "Bot Heal Rotation- Timer: %1.1f", ((float)leaderBot->GetHealRotationTimer()/1000.0f));
 
-						for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+						for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 							Bot* tempBot = *botListItr;
 
 							if(tempBot && tempBot->GetBotOwnerCharacterID() == c->CharacterID()) {
@@ -15883,7 +15789,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 
 					botList = GetBotsInHealRotation(leaderBot);
 
-					for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+					for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 						Bot* tempBot = *botListItr;
 
 						if(tempBot && tempBot->GetBotOwnerCharacterID() == c->CharacterID())
@@ -15931,7 +15837,7 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 
 					botList = GetBotsInHealRotation(leaderBot);
 
-					for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+					for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 						Bot* tempBot = *botListItr;
 
 						if(tempBot && tempBot->GetBotOwnerCharacterID() == c->CharacterID())
@@ -15991,13 +15897,45 @@ void Bot::ProcessBotCommands(Client *c, const Seperator *sep) {
 			}
 		}
 	}
+
+	if(!strcasecmp(sep->arg[1], "bardoutofcombat")) {
+		bool useOutOfCombatSongs = false;
+
+		if(sep->arg[2] && sep->arg[3]){
+			if(!strcasecmp(sep->arg[2], "on"))
+				useOutOfCombatSongs = true;
+			else if (!strcasecmp(sep->arg[2], "off"))
+				useOutOfCombatSongs = false;
+			else {
+				c->Message(0, "Usage #bot bardoutofcombat [on|off]");
+				return;
+			}
+
+			Mob *target = c->GetTarget();
+
+			if(target->IsBot() && (c == target->GetOwner()->CastToClient())) {
+				Bot* bardBot = target->CastToBot();
+
+				if(bardBot) {
+					bardBot->SetBardUseOutOfCombatSongs(useOutOfCombatSongs);
+					c->Message(0, "Bard use of out of combat songs updated.");
+				}
+			}
+			else {
+				c->Message(0, "Your target must be a bot that you own.");
+			}
+		}
+		else {
+			c->Message(0, "Usage #bot bardoutofcombat [on|off]");
+		}
+		return;
+	}
 }
 
 // franck: EQoffline
 // This function has been reworked for the caster bots, when engaged.
 // Healers bots must heal thoses who loose HP.
 bool EntityList::Bot_AICheckCloseBeneficialSpells(Bot* caster, uint8 iChance, float iRange, uint16 iSpellTypes) {
-	_ZP(EntityList_Bot_AICheckCloseBeneficialSpells);
 
 	if((iSpellTypes&SpellTypes_Detrimental) != 0) {
 		//according to live, you can buff and heal through walls...
@@ -16194,17 +16132,14 @@ Mob* EntityList::GetMobByBotID(uint32 botID) {
 	Mob* Result = 0;
 
 	if(botID > 0) {
-		LinkedListIterator<Mob*> iterator(mob_list);
+		auto it = mob_list.begin();
 
-		iterator.Reset();
-
-		while(iterator.MoreElements()) {
-			if(iterator.GetData()->IsBot() && iterator.GetData()->CastToBot()->GetBotID() == botID) {
-				Result = iterator.GetData();
+	for (auto it = mob_list.begin(); it != mob_list.end(); ++it) {
+		if(!it->second) continue;
+			if(it->second->IsBot() && it->second->CastToBot()->GetBotID() == botID) {
+				Result = it->second;
 				break;
 			}
-
-			iterator.Advance();
 		}
 	}
 
@@ -16215,7 +16150,7 @@ Bot* EntityList::GetBotByBotID(uint32 botID) {
 	Bot* Result = 0;
 
 	if(botID > 0) {
-		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); botListItr++) {
+		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); ++botListItr) {
 			Bot* tempBot = *botListItr;
 
 			if(tempBot && tempBot->GetBotID() == botID) {
@@ -16232,7 +16167,7 @@ Bot* EntityList::GetBotByBotName(std::string botName) {
 	Bot* Result = 0;
 
 	if(!botName.empty()) {
-		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); botListItr++) {
+		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); ++botListItr) {
 			Bot* tempBot = *botListItr;
 
 			if(tempBot && std::string(tempBot->GetName()) == botName) {
@@ -16272,7 +16207,7 @@ void EntityList::AddBot(Bot *newBot, bool SendSpawnPacket, bool dontqueue) {
 
 		bot_list.push_back(newBot);
 
-		mob_list.Insert(newBot);
+		mob_list.insert(std::pair<uint16, Mob*>(newBot->GetID(), newBot));
 	}
 }
 
@@ -16280,7 +16215,7 @@ std::list<Bot*> EntityList::GetBotsByBotOwnerCharacterID(uint32 botOwnerCharacte
 	std::list<Bot*> Result;
 
 	if(botOwnerCharacterID > 0) {
-		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); botListItr++) {
+		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); ++botListItr) {
 			Bot* tempBot = *botListItr;
 
 			if(tempBot && tempBot->GetBotOwnerCharacterID() == botOwnerCharacterID)
@@ -16293,10 +16228,9 @@ std::list<Bot*> EntityList::GetBotsByBotOwnerCharacterID(uint32 botOwnerCharacte
 
 void EntityList::BotPickLock(Bot* rogue)
 {
-	LinkedListIterator<Doors*> iterator(door_list);
-	iterator.Reset();
-	while(iterator.MoreElements()) {
-		Doors *cdoor = iterator.GetData();
+	auto it = door_list.begin();
+	for (auto it = door_list.begin(); it != door_list.end(); ++it) {
+		Doors *cdoor = it->second;
 		if(cdoor && !cdoor->IsDoorOpen()) {
 			float zdiff = rogue->GetZ() - cdoor->GetZ();
 			if(zdiff < 0)
@@ -16313,16 +16247,16 @@ void EntityList::BotPickLock(Bot* rogue)
 
 				float bonus1 = 0.0f;
 				float bonus2 = 0.0f;
-				float skill = rogue->GetSkill(PICK_LOCK);
+				float skill = rogue->GetSkill(SkillPickLock);
 
 				if(item1) { // Hand slot item
-					if(item1->GetItem()->SkillModType == PICK_LOCK) {
+					if(item1->GetItem()->SkillModType == SkillPickLock) {
 						bonus1 = skill * (((float)item1->GetItem()->SkillModValue) / 100.0f);
 					}
 				}
 
 				if(item2) { // Primary slot item
-					if(item2->GetItem()->SkillModType == PICK_LOCK) {
+					if(item2->GetItem()->SkillModType == SkillPickLock) {
 						bonus2 = skill * (((float)item2->GetItem()->SkillModValue) / 100.0f);
 					}
 				}
@@ -16335,7 +16269,6 @@ void EntityList::BotPickLock(Bot* rogue)
 				}
 			}
 		}
-		iterator.Advance();
 	}
 }
 
@@ -16343,7 +16276,7 @@ bool EntityList::RemoveBot(uint16 entityID) {
 	bool Result = false;
 
 	if(entityID > 0) {
-		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); botListItr++)
+		for(std::list<Bot*>::iterator botListItr = bot_list.begin(); botListItr != bot_list.end(); ++botListItr)
 		{
 			Bot* tempBot = *botListItr;
 
@@ -16365,18 +16298,17 @@ void EntityList::ShowSpawnWindow(Client* client, int Distance, bool NamedOnly) {
 	std::string WindowText;
 	int LastCon = -1;
 	int CurrentCon = 0;
+	Mob* curMob = nullptr;
 
 	uint32 array_counter = 0;
 
-	LinkedListIterator<Mob*> iterator(mob_list);
-	iterator.Reset();
+	auto it = mob_list.begin();
 
-	while(iterator.MoreElements())
-	{
-		if (iterator.GetData() && (iterator.GetData()->DistNoZ(*client)<=Distance))
-		{
-			if(iterator.GetData()->IsTrackable()) {
-				Mob* cur_entity = iterator.GetData();
+	for (auto it = mob_list.begin(); it != mob_list.end(); ++it) {
+	curMob = it->second;
+		if (curMob && curMob->DistNoZ(*client)<=Distance) {
+			if(curMob->IsTrackable()) {
+				Mob* cur_entity = curMob;
 				int Extras = (cur_entity->IsBot() || cur_entity->IsPet() || cur_entity->IsFamiliar() || cur_entity->IsClient());
 				const char *const MyArray[] = {
 					"a_","an_","Innkeep_","Barkeep_",
@@ -16418,7 +16350,6 @@ void EntityList::ShowSpawnWindow(Client* client, int Distance, bool NamedOnly) {
 					const char *CurEntityName = cur_entity->GetName(); //Call function once
 					for (int Index = 0; Index < MyArraySize; Index++) {
 						if (!strncasecmp(CurEntityName, MyArray[Index], strlen(MyArray[Index])) || (Extras)) {
-							iterator.Advance();
 							ContinueFlag = true;
 							break; //From Index for
 						};
@@ -16475,8 +16406,6 @@ void EntityList::ShowSpawnWindow(Client* client, int Distance, bool NamedOnly) {
 				}
 			}
 		}
-
-		iterator.Advance();
 	}
 	WindowText += "</c>";
 
@@ -16897,7 +16826,7 @@ bool Bot::AddHealRotationMember( Bot* healer ) {
 
 				std::list<Bot*> botList = GetBotsInHealRotation(this);
 
-				for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+				for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 					Bot* tempBot = *botListItr;
 
 					if(tempBot)
@@ -16945,7 +16874,7 @@ bool Bot::RemoveHealRotationMember( Bot* healer ) {
 		//update rotation data
 		std::list<Bot*> botList = GetBotsInHealRotation(leader);
 
-		for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+		for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 			Bot* tempBot = *botListItr;
 
 			if(tempBot) {
@@ -17020,7 +16949,7 @@ bool Bot::AddHealRotationTarget( Mob* target ) {
 
 				_healRotationTargets[i] = target->GetID();
 
-				for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+				for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 					Bot* tempBot = *botListItr;
 
 					if(tempBot && tempBot != this) {
@@ -17058,7 +16987,7 @@ bool Bot::RemoveHealRotationTarget( Mob* target ) {
 				index = i;
 				removed = true;
 
-				for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); botListItr++) {
+				for(std::list<Bot*>::iterator botListItr = botList.begin(); botListItr != botList.end(); ++botListItr) {
 					Bot* tempBot = *botListItr;
 
 					if(tempBot)
@@ -17197,7 +17126,7 @@ void Bot::BotHealRotationsClear(Client* c) {
 	if(c) {
 		std::list<Bot*> BotList = entity_list.GetBotsByBotOwnerCharacterID(c->CharacterID());
 
-		for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); botListItr++) {
+		for(std::list<Bot*>::iterator botListItr = BotList.begin(); botListItr != BotList.end(); ++botListItr) {
 			Bot* tempBot = *botListItr;
 			if(tempBot->GetInHealRotation()) {
 				//clear all heal rotation data for bots in a heal rotation

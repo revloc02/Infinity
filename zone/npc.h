@@ -79,8 +79,8 @@ public:
 	virtual ~NPC();
 
 	//abstract virtual function implementations requird by base abstract class
-	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillType attack_skill);
-	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillType attack_skill, bool avoidable = true, int8 buffslot = -1, bool iBuffTic = false);
+	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillUseTypes attack_skill);
+	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillUseTypes attack_skill, bool avoidable = true, int8 buffslot = -1, bool iBuffTic = false);
 	virtual bool Attack(Mob* other, int Hand = 13, bool FromRiposte = false, bool IsStrikethrough = false,
 		bool IsFromSpell = false, ExtraAttackOptions *opts = nullptr);
 	virtual bool HasRaid() { return false; }
@@ -109,15 +109,15 @@ public:
 	void CalcNPCDamage();
 
 
-	int32 GetActSpellDamage(uint16 spell_id, int32 value);
-	int32 GetActSpellHealing(uint16 spell_id, int32 value);
+	int32 GetActSpellDamage(uint16 spell_id, int32 value, Mob* target = nullptr);
+	int32 GetActSpellHealing(uint16 spell_id, int32 value, Mob* target = nullptr);
 	inline void SetSpellFocusDMG(int32 NewSpellFocusDMG) {SpellFocusDMG = NewSpellFocusDMG;}
 	inline void SetSpellFocusHeal(int32 NewSpellFocusHeal) {SpellFocusHeal = NewSpellFocusHeal;}
 	int32 SpellFocusDMG;
 	int32 SpellFocusHeal;
 
 	virtual void SetTarget(Mob* mob);
-	virtual uint16 GetSkill(SkillType skill_num) const { if (skill_num <= HIGHEST_SKILL) { return skills[skill_num]; } return 0; }
+	virtual uint16 GetSkill(SkillUseTypes skill_num) const { if (skill_num <= HIGHEST_SKILL) { return skills[skill_num]; } return 0; }
 
 	void CalcItemBonuses(StatBonuses *newbon);
 	virtual void CalcBonuses();
@@ -265,8 +265,8 @@ public:
 	inline bool			IsGuarding() const { return(guard_heading != 0); }
 	void				SaveGuardSpotCharm();
 	void				RestoreGuardSpotCharm();
-	void				AI_SetRoambox(float iDist, float iRoamDist, uint32 iDelay = 2500);
-	void				AI_SetRoambox(float iDist, float iMaxX, float iMinX, float iMaxY, float iMinY, uint32 iDelay = 2500);
+	void				AI_SetRoambox(float iDist, float iRoamDist, uint32 iDelay = 2500, uint32 iMinDelay = 2500);
+	void				AI_SetRoambox(float iDist, float iMaxX, float iMinX, float iMaxY, float iMinY, uint32 iDelay = 2500, uint32 iMinDelay = 2500);
 
 	//mercenary stuff
 	void	LoadMercTypes();
@@ -352,9 +352,10 @@ public:
     uint32 	GetSpawnKillCount();
     int 	GetScore();
     void 	mod_prespawn(Spawn2 *sp);
-	int 	mod_npc_damage(int damage, SkillType skillinuse, int hand, const Item_Struct* weapon, Mob* other);
+	int 	mod_npc_damage(int damage, SkillUseTypes skillinuse, int hand, const Item_Struct* weapon, Mob* other);
 	void	mod_npc_killed_merit(Mob* c);
 	void	mod_npc_killed(Mob* oos);
+	void AISpellsList(Client *c);
 
 protected:
 
@@ -429,6 +430,7 @@ protected:
 	float roambox_movingto_x;
 	float roambox_movingto_y;
 	uint32 roambox_delay;
+	uint32 roambox_min_delay;
 
 	uint16	skills[HIGHEST_SKILL+1];
 	uint32	equipment[MAX_WORN_INVENTORY];	//this is an array of item IDs

@@ -27,20 +27,20 @@
 
 Schema:
 CREATE TABLE traps (
-	id int(11) NOT nullptr auto_increment,
-	zone varchar(16) NOT nullptr default '',
-	x int(11) NOT nullptr default '0',
-	y int(11) NOT nullptr default '0',
-	z int(11) NOT nullptr default '0',
-	chance tinyint NOT nullptr default '0',
-	maxzdiff float NOT nullptr default '0',
-	radius float NOT nullptr default '0',
-	effect int(11) NOT nullptr default '0',
-	effectvalue int(11) NOT nullptr default '0',
-	effectvalue2 int(11) NOT nullptr default '0',
-	message varcahr(200) NOT nullptr;
-	skill int(11) NOT nullptr default '0',
-	spawnchance int(11) NOT nullptr default '0',
+	id int(11) NOT NULL auto_increment,
+	zone varchar(16) NOT NULL default '',
+	x int(11) NOT NULL default '0',
+	y int(11) NOT NULL default '0',
+	z int(11) NOT NULL default '0',
+	chance tinyint NOT NULL default '0',
+	maxzdiff float NOT NULL default '0',
+	radius float NOT NULL default '0',
+	effect int(11) NOT NULL default '0',
+	effectvalue int(11) NOT NULL default '0',
+	effectvalue2 int(11) NOT NULL default '0',
+	message varcahr(200) NOT NULL;
+	skill int(11) NOT NULL default '0',
+	spawnchance int(11) NOT NULL default '0',
 	PRIMARY KEY (id)
 ) TYPE=MyISAM;
 
@@ -203,16 +203,14 @@ void Trap::Trigger(Mob* trigger)
 }
 
 Trap* EntityList::FindNearbyTrap(Mob* searcher, float max_dist) {
-	LinkedListIterator<Trap*> iterator(trap_list);
-	iterator.Reset();
 	float dist = 999999;
 	Trap* current_trap = nullptr;
 
 	float max_dist2 = max_dist*max_dist;
 	Trap *cur;
-	while(iterator.MoreElements())
-	{
-		cur = iterator.GetData();
+	auto it = trap_list.begin();
+	while (it != trap_list.end()) {
+		cur = it->second;
 		if(!cur->disarmed) {
 			float curdist = 0;
 			float tmp = searcher->GetX() - cur->x;
@@ -228,23 +226,21 @@ Trap* EntityList::FindNearbyTrap(Mob* searcher, float max_dist) {
 				current_trap = cur;
 			}
 		}
-		iterator.Advance();
+		++it;
 	}
 	return current_trap;
 }
 
 Mob* EntityList::GetTrapTrigger(Trap* trap) {
-	LinkedListIterator<Client*> iterator(client_list);
-
 	Mob* savemob = 0;
-	iterator.Reset();
 
 	float xdiff, ydiff, zdiff;
 
 	float maxdist = trap->radius * trap->radius;
 
-	while(iterator.MoreElements()) {
-		Client* cur = iterator.GetData();
+	auto it = client_list.begin();
+	while (it != client_list.end()) {
+		Client* cur = it->second;
 		zdiff = cur->GetZ() - trap->z;
 		if(zdiff < 0)
 			zdiff = 0 - zdiff;
@@ -259,7 +255,7 @@ Mob* EntityList::GetTrapTrigger(Trap* trap) {
 			else
 				savemob = cur;
 		}
-		iterator.Advance();
+		++it;
 	}
 	return savemob;
 }

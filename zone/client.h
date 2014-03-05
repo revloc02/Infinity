@@ -212,14 +212,16 @@ public:
 	~Client();
 
 	//abstract virtual function implementations requird by base abstract class
-	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillType attack_skill);
-	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillType attack_skill, bool avoidable = true, int8 buffslot = -1, bool iBuffTic = false);
+	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillUseTypes attack_skill);
+	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillUseTypes attack_skill, bool avoidable = true, int8 buffslot = -1, bool iBuffTic = false);
 	virtual bool Attack(Mob* other, int Hand = 13, bool FromRiposte = false, bool IsStrikethrough = false, bool IsFromSpell = false,
 		ExtraAttackOptions *opts = nullptr);
 	virtual bool HasRaid() { return (GetRaid() ? true : false); }
 	virtual bool HasGroup() { return (GetGroup() ? true : false); }
 	virtual Raid* GetRaid() { return entity_list.GetRaidByClient(this); }
 	virtual Group* GetGroup() { return entity_list.GetGroupByClient(this); }
+	virtual inline bool IsBerserk() { return berserk; }
+	virtual int32 GetMeleeMitDmg(Mob *attacker, int32 damage, int32 minhit, float mit_rating, float atk_rating);
 
 	void	AI_Init();
 	void	AI_Start(uint32 iMoveDelay = 0);
@@ -248,6 +250,14 @@ public:
 	uint8	SlotConvert(uint8 slot,bool bracer=false);
 	void	Message_StringID(uint32 type, uint32 string_id, uint32 distance = 0);
 	void	Message_StringID(uint32 type, uint32 string_id, const char* message,const char* message2=0,const char* message3=0,const char* message4=0,const char* message5=0,const char* message6=0,const char* message7=0,const char* message8=0,const char* message9=0, uint32 distance = 0);
+	bool	FilteredMessageCheck(Mob *sender, eqFilterType filter);
+	void	FilteredMessage_StringID(Mob *sender, uint32 type, eqFilterType filter, uint32 string_id);
+	void	FilteredMessage_StringID(Mob *sender, uint32 type, eqFilterType filter,
+			uint32 string_id, const char *message1, const char *message2 = nullptr,
+			const char *message3 = nullptr, const char *message4 = nullptr,
+			const char *message5 = nullptr, const char *message6 = nullptr,
+			const char *message7 = nullptr, const char *message8 = nullptr,
+			const char *message9 = nullptr);
 	void	SendBazaarResults(uint32 trader_id,uint32 class_,uint32 race,uint32 stat,uint32 slot,uint32 type,char name[64],uint32 minprice,uint32 maxprice);
 	void	SendTraderItem(uint32 item_id,uint16 quantity);
 	uint16	FindTraderItem(int32 SerialNumber,uint16 Quantity);
@@ -284,7 +294,7 @@ public:
 	void	VoiceMacroReceived(uint32 Type, char *Target, uint32 MacroNumber);
 	void	SendSound();
 	void	LearnRecipe(uint32 recipeID);
-	bool	CanIncreaseTradeskill(SkillType tradeskill);
+	bool	CanIncreaseTradeskill(SkillUseTypes tradeskill);
 
 	EQApplicationPacket*	ReturnItemPacket(int16 slot_id, const ItemInst* inst, ItemPacketType packet_type);
 
@@ -391,7 +401,7 @@ public:
 	virtual void CalcBonuses();
 	//these are all precalculated now
 	inline virtual int16	GetAC()		const { return AC; }
-	inline virtual int16 GetATK() const { return ATK + itembonuses.ATK + spellbonuses.ATK + ((GetSTR() + GetSkill(OFFENSE)) * 9 / 10); }
+	inline virtual int16 GetATK() const { return ATK + itembonuses.ATK + spellbonuses.ATK + ((GetSTR() + GetSkill(SkillOffense)) * 9 / 10); }
 	inline virtual int16 GetATKBonus() const { return itembonuses.ATK + spellbonuses.ATK; }
 	inline virtual int	GetHaste() const { return Haste; }
 	int GetRawACNoShield(int &shield_ac) const;
@@ -471,17 +481,16 @@ public:
 
 	inline virtual int16	GetDelayDeath()		const { return aabonuses.DelayDeath + spellbonuses.DelayDeath + itembonuses.DelayDeath + 11; }
 
-	int32 Additional_SpellDmg(uint16 spell_id, bool bufftick = false);
-	int32 Additional_Heal(uint16 spell_id);
 	float GetActSpellRange(uint16 spell_id, float range, bool IsBard = false);
-	int32 GetActSpellDamage(uint16 spell_id, int32 value);
-	int32 GetActSpellHealing(uint16 spell_id, int32 value);
+	int32 GetActSpellDamage(uint16 spell_id, int32 value, Mob* target = nullptr);
+	int32 GetActSpellHealing(uint16 spell_id, int32 value, Mob* target = nullptr);
 	int32 GetActSpellCost(uint16 spell_id, int32);
 	int32 GetActSpellDuration(uint16 spell_id, int32);
 	int32 GetActSpellCasttime(uint16 spell_id, int32);
 	int32 GetDotFocus(uint16 spell_id, int32 value);
-	int32 GetActDoTDamage(uint16 spell_id, int32 value);
+	int32 GetActDoTDamage(uint16 spell_id, int32 value, Mob* target = nullptr);
 	virtual bool CheckFizzle(uint16 spell_id);
+	virtual bool CheckSpellLevelRestriction(uint16 spell_id);
 	virtual int GetCurrentBuffSlots() const;
 	virtual int GetCurrentSongSlots() const;
 	virtual int GetCurrentDiscSlots() const { return 1; }
@@ -585,7 +594,7 @@ public:
 	int32	GetCharacterFactionLevel(int32 faction_id);
 	int32	GetModCharacterFactionLevel(int32 faction_id);
 	bool	HatedByClass(uint32 p_race, uint32 p_class, uint32 p_deity, int32 pFaction);
-	char* BuildFactionMessage(int32 tmpvalue, int32 faction_id, int32 totalvalue, uint8 temp);
+	void	SendFactionMessage(int32 tmpvalue, int32 faction_id, int32 totalvalue, uint8 temp);
 
 	void	SetFactionLevel(uint32 char_id, uint32 npc_id, uint8 char_class, uint8 char_race, uint8 char_deity);
 	void	SetFactionLevel2(uint32 char_id, int32 faction_id, uint8 char_class, uint8 char_race, uint8 char_deity, int32 value, uint8 temp);
@@ -649,29 +658,29 @@ public:
 
 	void	IncreaseSkill(int skill_id, int value = 1) { if (skill_id <= HIGHEST_SKILL) { m_pp.skills[skill_id] += value; } }
 	void	IncreaseLanguageSkill(int skill_id, int value = 1);
-	virtual uint16 GetSkill(SkillType skill_id) const { if (skill_id <= HIGHEST_SKILL) { return((itembonuses.skillmod[skill_id] > 0)? m_pp.skills[skill_id]*(100 + itembonuses.skillmod[skill_id])/100 : m_pp.skills[skill_id]); } return 0; }
-	uint32	GetRawSkill(SkillType skill_id) const { if (skill_id <= HIGHEST_SKILL) { return(m_pp.skills[skill_id]); } return 0; }
-	bool	HasSkill(SkillType skill_id) const;
-	bool	CanHaveSkill(SkillType skill_id) const;
-	void	SetSkill(SkillType skill_num, uint16 value);
-	void	AddSkill(SkillType skillid, uint16 value);
+	virtual uint16 GetSkill(SkillUseTypes skill_id) const { if (skill_id <= HIGHEST_SKILL) { return((itembonuses.skillmod[skill_id] > 0)? m_pp.skills[skill_id]*(100 + itembonuses.skillmod[skill_id])/100 : m_pp.skills[skill_id]); } return 0; }
+	uint32	GetRawSkill(SkillUseTypes skill_id) const { if (skill_id <= HIGHEST_SKILL) { return(m_pp.skills[skill_id]); } return 0; }
+	bool	HasSkill(SkillUseTypes skill_id) const;
+	bool	CanHaveSkill(SkillUseTypes skill_id) const;
+	void	SetSkill(SkillUseTypes skill_num, uint16 value);
+	void	AddSkill(SkillUseTypes skillid, uint16 value);
 	void	CheckSpecializeIncrease(uint16 spell_id);
 	void	CheckSongSkillIncrease(uint16 spell_id);
-	bool	CheckIncreaseSkill(SkillType skillid, Mob *against_who, int chancemodi = 0);
+	bool	CheckIncreaseSkill(SkillUseTypes skillid, Mob *against_who, int chancemodi = 0);
 	void	CheckLanguageSkillIncrease(uint8 langid, uint8 TeacherSkill);
 	void	SetLanguageSkill(int langid, int value);
 	void	SetHoTT(uint32 mobid);
 	void	ShowSkillsWindow();
 	void	SendStatsWindow(Client* client, bool use_window);
 
-	uint16	MaxSkill(SkillType skillid, uint16 class_, uint16 level) const;
-	inline	uint16	MaxSkill(SkillType skillid) const { return MaxSkill(skillid, GetClass(), GetLevel()); }
-	uint8	SkillTrainLevel(SkillType skillid, uint16 class_);
+	uint16	MaxSkill(SkillUseTypes skillid, uint16 class_, uint16 level) const;
+	inline	uint16	MaxSkill(SkillUseTypes skillid) const { return MaxSkill(skillid, GetClass(), GetLevel()); }
+	uint8	SkillTrainLevel(SkillUseTypes skillid, uint16 class_);
 
 	void TradeskillSearchResults(const char *query, unsigned long qlen, unsigned long objtype, unsigned long someid);
 	void SendTradeskillDetails(uint32 recipe_id);
 	bool TradeskillExecute(DBTradeskillRecipe_Struct *spec);
-	void CheckIncreaseTradeskill(int16 bonusstat, int16 stat_modifier, float skillup_modifier, uint16 success_modifier, SkillType tradeskill);
+	void CheckIncreaseTradeskill(int16 bonusstat, int16 stat_modifier, float skillup_modifier, uint16 success_modifier, SkillUseTypes tradeskill);
 
 	void GMKill();
 	inline bool	IsMedding()	const {return medding;}
@@ -785,7 +794,7 @@ public:
 	void	QSSwapItemAuditor(MoveItem_Struct* move_in, bool postaction_call = false);
 	void	PutLootInInventory(int16 slot_id, const ItemInst &inst, ServerLootItem_Struct** bag_item_data = 0);
 	bool	AutoPutLootInInventory(ItemInst& inst, bool try_worn = false, bool try_cursor = true, ServerLootItem_Struct** bag_item_data = 0);
-	void	SummonItem(uint32 item_id, int16 charges = 0, uint32 aug1=0, uint32 aug2=0, uint32 aug3=0, uint32 aug4=0, uint32 aug5=0, bool attuned=false, uint16 to_slot=SLOT_CURSOR);
+	void	SummonItem(uint32 item_id, int16 charges = -1, uint32 aug1=0, uint32 aug2=0, uint32 aug3=0, uint32 aug4=0, uint32 aug5=0, bool attuned=false, uint16 to_slot=SLOT_CURSOR);
 	void	SetStats(uint8 type,int16 set_val);
 	void	IncStats(uint8 type,int16 increase_val);
 	void	DropItem(int16 slot_id);
@@ -807,11 +816,17 @@ public:
 
 	bool	Hungry() const {if (GetGM()) return false; return m_pp.hunger_level <= 3000;}
 	bool	Thirsty() const {if (GetGM()) return false; return m_pp.thirst_level <= 3000;}
+    int32   GetHunger() const { return m_pp.hunger_level; }
+    int32   GetThirst() const { return m_pp.thirst_level; }
+    void    SetHunger(int32 in_hunger);
+    void    SetThirst(int32 in_thirst);
+    void    SetConsumption(int32 in_hunger, int32 in_thirst);
 
 	bool	CheckTradeLoreConflict(Client* other);
 	void	LinkDead();
 	void	Insight(uint32 t_id);
 	bool	CheckDoubleAttack(bool tripleAttack = false);
+	bool	CheckDoubleRangedAttack();
 
 	//remove charges/multiple objects from inventory:
 	//bool	DecreaseByType(uint32 type, uint8 amt);
@@ -821,8 +836,8 @@ public:
 	void	RemoveNoRent(bool client_update = true);
 	void	RemoveDuplicateLore(bool client_update = true);
 	void	MoveSlotNotAllowed(bool client_update = true);
-	virtual void	RangedAttack(Mob* other);
-	virtual void	ThrowingAttack(Mob* other);
+	virtual void	RangedAttack(Mob* other, bool CanDoubleAttack = false);
+	virtual void	ThrowingAttack(Mob* other,  bool CanDoubleAttack = false);
 	void	DoClassAttacks(Mob *ca_target, uint16 skill = -1, bool IsRiposte=false);
 
 	void	SetZoneFlag(uint32 zone_id);
@@ -860,10 +875,12 @@ public:
 	void SetKnockBackExemption(bool v);
 	void SetPortExemption(bool v);
 	void SetSenseExemption(bool v) { m_SenseExemption = v; }
+	void SetAssistExemption(bool v) { m_AssistExemption = v; }
 	const bool IsShadowStepExempted() const { return m_ShadowStepExemption; }
 	const bool IsKnockBackExempted() const { return m_KnockBackExemption; }
 	const bool IsPortExempted() const { return m_PortExemption; }
 	const bool IsSenseExempted() const { return m_SenseExemption; }
+	const bool IsAssistExempted() const { return m_AssistExemption; }
 	const bool GetGMSpeed() const { return (gmspeed > 0); }
 	void CheatDetected(CheatTypes CheatType, float x, float y, float z);
 	const bool IsMQExemptedArea(uint32 zoneID, float x, float y, float z) const;
@@ -879,7 +896,7 @@ public:
 	int		GetNextAvailableSpellBookSlot(int starting_slot = 0);
 	inline uint32 GetSpellByBookSlot(int book_slot) { return m_pp.spell_book[book_slot]; }
 	inline bool HasSpellScribed(int spellid) { return (FindSpellBookSlotBySpellID(spellid) != -1 ? true : false); }
-	uint16	GetMaxSkillAfterSpecializationRules(SkillType skillid, uint16 maxSkill);
+	uint16	GetMaxSkillAfterSpecializationRules(SkillUseTypes skillid, uint16 maxSkill);
 	void	SendPopupToClient(const char *Title, const char *Text, uint32 PopupID = 0, uint32 Buttons = 0, uint32 Duration = 0);
 	void	SendWindow(uint32 PopupID, uint32 NegativeID, uint32 Buttons, const char *ButtonName0, const char *ButtonName1, uint32 Duration, int title_type, Client* target, const char *Title, const char *Text, ...);
 	bool	PendingTranslocate;
@@ -1069,7 +1086,7 @@ public:
 	void ClearHover();
 	inline bool IsBlockedBuff(int16 SpellID) { return PlayerBlockedBuffs.find(SpellID) != PlayerBlockedBuffs.end(); }
 	inline bool IsBlockedPetBuff(int16 SpellID) { return PetBlockedBuffs.find(SpellID) != PetBlockedBuffs.end(); }
-	bool IsDraggingCorpse(const char* CorpseName);
+	bool IsDraggingCorpse(uint16 CorpseID);
 	inline bool IsDraggingCorpse() { return (DraggedCorpses.size() > 0); }
 	void DragCorpses();
 	inline void ClearDraggedCorpses() { DraggedCorpses.clear(); }
@@ -1079,6 +1096,7 @@ public:
 	void SendAlternateCurrencyValues();
 	void SendAlternateCurrencyValue(uint32 currency_id, bool send_if_null = true);
 	uint32 GetAlternateCurrencyValue(uint32 currency_id) const;
+	void ProcessAlternateCurrencyQueue();
 	void OpenLFGuildWindow();
 	void HandleLFGuildResponse(ServerPacket *pack);
 	void SendLFGuildStatus();
@@ -1128,6 +1146,7 @@ public:
 	const char* GetRacePlural(Client* client);
 	const char* GetClassPlural(Client* client);
 	void SendWebLink(const char* website);
+	void SendMarqueeMessage(uint32 type, uint32 priority, uint32 fade_in, uint32 fade_out, uint32 duration, std::string msg);
 
 	void DuplicateLoreMessage(uint32 ItemID);
 	void GarbleMessage(char *, uint8);
@@ -1147,10 +1166,12 @@ public:
 	int16 GetActCHA() { return( std::min(GetMaxCHA(), GetCHA()) ); }
 	void LoadAccountFlags();
 	void SetAccountFlag(std::string flag, std::string val);
-	std::string GetAccountFlag(std::string flag);    float GetDamageMultiplier(SkillType);
-	int mod_client_damage(int damage, SkillType skillinuse, int hand, const ItemInst* weapon, Mob* other);
+	std::string GetAccountFlag(std::string flag);    float GetDamageMultiplier(SkillUseTypes);
+	void Consume(const Item_Struct *item, uint8 type, int16 slot, bool auto_consume);
+	void PlayMP3(const char* fname);
+	int mod_client_damage(int damage, SkillUseTypes skillinuse, int hand, const ItemInst* weapon, Mob* other);
 	bool mod_client_message(char* message, uint8 chan_num);
-	bool mod_can_increase_skill(SkillType skillid, Mob* against_who);
+	bool mod_can_increase_skill(SkillUseTypes skillid, Mob* against_who);
 	int16 mod_increase_skill_chance(int16 chance, Mob* against_who);
 	int mod_bindwound_percent(int max_percent, Mob* bindmob);
 	int mod_bindwound_hp(int bindhps, Mob* bindmob);
@@ -1167,6 +1188,9 @@ public:
 	int32 mod_client_xp(int32 in_exp, NPC *npc);
 	uint32 mod_client_xp_for_level(uint32 xp, uint16 check_level);
 	int mod_client_haste_cap(int cap);
+    int mod_consume(Item_Struct *item, ItemUseTypes type, int change);
+    int mod_food_value(const Item_Struct *item, int change);
+    int mod_drink_value(const Item_Struct *item, int change);
 
 protected:
 	friend class Mob;
@@ -1188,6 +1212,8 @@ protected:
 	VERTEX aa_los_them;
 	Mob *aa_los_them_mob;
 	bool los_status;
+	float aa_los_me_heading;
+	bool los_status_facing;
 	QGlobalCache *qGlobals;
 
 	/** Adventure Variables **/
@@ -1432,7 +1458,10 @@ private:
 	bool m_KnockBackExemption;
 	bool m_PortExemption;
 	bool m_SenseExemption;
+	bool m_AssistExemption;
+	bool alternate_currency_loaded;
 	std::map<uint32, uint32> alternate_currency;
+	std::queue<std::pair<uint32, int32>> alternate_currency_queued_operations;
 
 	//Connecting debug code.
 	enum { //connecting states, used for debugging only
@@ -1460,7 +1489,7 @@ private:
 
 	std::set<uint32> PlayerBlockedBuffs;
 	std::set<uint32> PetBlockedBuffs;
-	std::list<std::string> DraggedCorpses;
+	std::list<std::pair<std::string, uint16> > DraggedCorpses;
 
 	uint8 MaxXTargets;
 	bool XTargetAutoAddHaters;

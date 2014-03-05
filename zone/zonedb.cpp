@@ -78,7 +78,7 @@ bool ZoneDatabase::SaveZoneCFG(uint32 zoneid, uint16 instance_id, NewZone_Struct
 	return true;
 }
 
-bool ZoneDatabase::GetZoneCFG(uint32 zoneid, uint16 instance_id, NewZone_Struct *zone_data, bool &can_bind, bool &can_combat, bool &can_levitate, bool &can_castoutdoor, bool &is_city, bool &is_hotzone, bool &allow_mercs, int &ruleset, char **map_filename) {
+bool ZoneDatabase::GetZoneCFG(uint32 zoneid, uint16 instance_id, NewZone_Struct *zone_data, bool &can_bind, bool &can_combat, bool &can_levitate, bool &can_castoutdoor, bool &is_city, bool &is_hotzone, bool &allow_mercs, uint8 &zone_type, int &ruleset, char **map_filename) {
 	char errbuf[MYSQL_ERRMSG_SIZE];
 	char *query = 0;
 	MYSQL_RES *result;
@@ -94,7 +94,11 @@ bool ZoneDatabase::GetZoneCFG(uint32 zoneid, uint16 instance_id, NewZone_Struct 
 		"fog_red4,fog_green4,fog_blue4,fog_minclip4,fog_maxclip4,fog_density,"
 		"sky,zone_exp_multiplier,safe_x,safe_y,safe_z,underworld,"
 		"minclip,maxclip,time_type,canbind,cancombat,canlevitate,"
-		"castoutdoor,hotzone,ruleset,suspendbuffs,map_file_name,short_name"
+		"castoutdoor,hotzone,ruleset,suspendbuffs,map_file_name,short_name,"
+		"rain_chance1,rain_chance2,rain_chance3,rain_chance4,"
+		"rain_duration1,rain_duration2,rain_duration3,rain_duration4,"
+		"snow_chance1,snow_chance2,snow_chance3,snow_chance4,"
+		"snow_duration1,snow_duration2,snow_duration3,snow_duration4"
 		" from zone where zoneidnumber=%i and version=%i",zoneid, instance_id), errbuf, &result)) {
 		safe_delete_array(query);
 		row = mysql_fetch_row(result);
@@ -134,6 +138,7 @@ bool ZoneDatabase::GetZoneCFG(uint32 zoneid, uint16 instance_id, NewZone_Struct 
 			can_castoutdoor = atoi(row[r++])==0?false:true;
 			is_hotzone = atoi(row[r++])==0?false:true;
 			allow_mercs = true;
+			zone_type = zone_data->ztype;
 			ruleset = atoi(row[r++]);
 			zone_data->SuspendBuffs = atoi(row[r++]);
 			char *file = row[r++];
@@ -144,6 +149,18 @@ bool ZoneDatabase::GetZoneCFG(uint32 zoneid, uint16 instance_id, NewZone_Struct 
 			else
 			{
 				strcpy(*map_filename, row[r++]);
+			}
+			for(i=0;i<4;i++){
+				zone_data->rain_chance[i]=atoi(row[r++]);
+			}
+			for(i=0;i<4;i++){
+				zone_data->rain_duration[i]=atoi(row[r++]);
+			}
+			for(i=0;i<4;i++){
+				zone_data->snow_chance[i]=atoi(row[r++]);
+			}
+			for(i=0;i<4;i++){
+				zone_data->snow_duration[i]=atof(row[r++]);
 			}
 			good = true;
 		}
@@ -833,7 +850,6 @@ bool ZoneDatabase::GetCharacterInfoForLogin(const char* name, uint32* character_
 char* current_zone, PlayerProfile_Struct* pp, Inventory* inv, ExtendedProfile_Struct *ext,
 uint32* pplen, uint32* guilddbid, uint8* guildrank,
 uint8 *class_, uint8 *level, bool *LFP, bool *LFG, uint8 *NumXTargets, uint8 *firstlogon) {
-	_CP(Database_GetCharacterInfoForLogin);
 	char errbuf[MYSQL_ERRMSG_SIZE];
 	char *query = 0;
 	uint32 querylen;
@@ -871,7 +887,6 @@ bool ZoneDatabase::GetCharacterInfoForLogin_result(MYSQL_RES* result,
 	uint32* character_id, char* current_zone, PlayerProfile_Struct* pp, Inventory* inv,
 	ExtendedProfile_Struct *ext, uint32* pplen, uint32* guilddbid, uint8* guildrank,
 	uint8 *class_, uint8 *level, bool *LFP, bool *LFG, uint8 *NumXTargets, uint8* firstlogon) {
-	_CP(Database_GetCharacterInfoForLogin_result);
 
 	MYSQL_ROW row;
 	unsigned long* lengths;
@@ -1047,6 +1062,7 @@ const NPCType* ZoneDatabase::GetNPCType (uint32 id) {
 			"npc_types.hp_regen_rate,"
 			"npc_types.mana_regen_rate,"
 			"npc_types.aggroradius,"
+			"npc_types.assistradius,"
 			"npc_types.bodytype,"
 			"npc_types.npc_faction_id,"
 			"npc_types.face,"
@@ -1146,6 +1162,9 @@ const NPCType* ZoneDatabase::GetNPCType (uint32 id) {
 				// set defaultvalue for aggroradius
 				if (tmpNPCType->aggroradius <= 0)
 					tmpNPCType->aggroradius = 70;
+				tmpNPCType->assistradius = (int32)atoi(row[r++]);
+				if (tmpNPCType->assistradius <= 0)
+					tmpNPCType->assistradius = tmpNPCType->aggroradius;
 
 				if (row[r] && strlen(row[r]))
 					tmpNPCType->bodytype = (uint8)atoi(row[r]);
@@ -1198,7 +1217,7 @@ const NPCType* ZoneDatabase::GetNPCType (uint32 id) {
 						{
 							if ((at_row = mysql_fetch_row(at_result)))
 							{
-								for (i = 0; i < MAX_MATERIALS; i++)
+								for (i = 0; i < _MaterialCount; i++)
 								{
 									tmpNPCType->armor_tint[i] = atoi(at_row[i * 3]) << 16;
 									tmpNPCType->armor_tint[i] |= atoi(at_row[i * 3 + 1]) << 8;
@@ -1231,7 +1250,7 @@ const NPCType* ZoneDatabase::GetNPCType (uint32 id) {
 
 				if (armor_tint_id == 0)
 				{
-					for (i = 1; i < MAX_MATERIALS; i++)
+					for (i = 1; i < _MaterialCount; i++)
 					{
 						tmpNPCType->armor_tint[i] = tmpNPCType->armor_tint[0];
 					}
@@ -1509,7 +1528,7 @@ const NPCType* ZoneDatabase::GetMercType(uint32 id, uint16 raceid, uint32 client
 						{
 							if ((at_row = mysql_fetch_row(at_result)))
 							{
-								for (i = 0; i < MAX_MATERIALS; i++)
+								for (i = 0; i < _MaterialCount; i++)
 								{
 									tmpNPCType->armor_tint[i] = atoi(at_row[i * 3]) << 16;
 									tmpNPCType->armor_tint[i] |= atoi(at_row[i * 3 + 1]) << 8;
@@ -1542,7 +1561,7 @@ const NPCType* ZoneDatabase::GetMercType(uint32 id, uint16 raceid, uint32 client
 
 				if (armor_tint_id == 0)
 				{
-					for (i = 1; i < MAX_MATERIALS; i++)
+					for (i = 1; i < _MaterialCount; i++)
 					{
 						tmpNPCType->armor_tint[i] = tmpNPCType->armor_tint[0];
 					}
@@ -1796,7 +1815,7 @@ void ZoneDatabase::SaveMercBuffs(Merc *merc) {
 
 			if(!database.RunQuery(Query, MakeAnyLenString(&Query, "INSERT INTO merc_buffs (MercId, SpellId, CasterLevel, DurationFormula, "
 				"TicsRemaining, PoisonCounters, DiseaseCounters, CurseCounters, CorruptionCounters, HitCount, MeleeRune, MagicRune, "
-				"DeathSaveSuccessChance, CasterAARank, Persistent) VALUES (%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u);",
+				"dot_rune, caston_x, Persistent, caston_y, caston_z, ExtraDIChance) VALUES (%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %i, %u, %i, %i, %i);",
 				merc->GetMercID(), buffs[BuffCount].spellid, buffs[BuffCount].casterlevel, spells[buffs[BuffCount].spellid].buffdurationformula,
 				buffs[BuffCount].ticsremaining,
 				CalculatePoisonCounters(buffs[BuffCount].spellid) > 0 ? buffs[BuffCount].counters : 0,
@@ -1804,8 +1823,12 @@ void ZoneDatabase::SaveMercBuffs(Merc *merc) {
 				CalculateCurseCounters(buffs[BuffCount].spellid) > 0 ? buffs[BuffCount].counters : 0,
 				CalculateCorruptionCounters(buffs[BuffCount].spellid) > 0 ? buffs[BuffCount].counters : 0,
 				buffs[BuffCount].numhits, buffs[BuffCount].melee_rune, buffs[BuffCount].magic_rune,
-				buffs[BuffCount].deathSaveSuccessChance,
-				buffs[BuffCount].deathsaveCasterAARank, IsPersistent), TempErrorMessageBuffer)) {
+				buffs[BuffCount].dot_rune,
+				buffs[BuffCount].caston_x, 
+				IsPersistent, 
+				buffs[BuffCount].caston_y, 
+				buffs[BuffCount].caston_z,
+				buffs[BuffCount].ExtraDIChance), TempErrorMessageBuffer)) {
 				errorMessage = std::string(TempErrorMessageBuffer);
 				safe_delete(Query);
 				Query = 0;
@@ -1837,7 +1860,7 @@ void ZoneDatabase::LoadMercBuffs(Merc *merc) {
 
 	bool BuffsLoaded = false;
 
-	if(!database.RunQuery(Query, MakeAnyLenString(&Query, "SELECT SpellId, CasterLevel, DurationFormula, TicsRemaining, PoisonCounters, DiseaseCounters, CurseCounters, CorruptionCounters, HitCount, MeleeRune, MagicRune, DeathSaveSuccessChance, CasterAARank, Persistent FROM merc_buffs WHERE MercId = %u", merc->GetMercID()), TempErrorMessageBuffer, &DatasetResult)) {
+	if(!database.RunQuery(Query, MakeAnyLenString(&Query, "SELECT SpellId, CasterLevel, DurationFormula, TicsRemaining, PoisonCounters, DiseaseCounters, CurseCounters, CorruptionCounters, HitCount, MeleeRune, MagicRune, dot_rune, caston_x, Persistent, caston_y, caston_z, ExtraDIChance FROM merc_buffs WHERE MercId = %u", merc->GetMercID()), TempErrorMessageBuffer, &DatasetResult)) {
 		errorMessage = std::string(TempErrorMessageBuffer);
 	}
 	else {
@@ -1863,14 +1886,18 @@ void ZoneDatabase::LoadMercBuffs(Merc *merc) {
 			buffs[BuffCount].numhits = atoi(DataRow[8]);
 			buffs[BuffCount].melee_rune = atoi(DataRow[9]);
 			buffs[BuffCount].magic_rune = atoi(DataRow[10]);
-			buffs[BuffCount].deathSaveSuccessChance = atoi(DataRow[11]);
-			buffs[BuffCount].deathsaveCasterAARank = atoi(DataRow[12]);
+			buffs[BuffCount].dot_rune = atoi(DataRow[11]);
+			buffs[BuffCount].caston_x = atoi(DataRow[12]);
 			buffs[BuffCount].casterid = 0;
 
 			bool IsPersistent = false;
 
 			if(atoi(DataRow[13]))
 				IsPersistent = true;
+
+			buffs[BuffCount].caston_y = atoi(DataRow[13]);
+			buffs[BuffCount].caston_z = atoi(DataRow[14]);
+			buffs[BuffCount].ExtraDIChance = atoi(DataRow[15]);
 
 			buffs[BuffCount].persistant_buff = IsPersistent;
 
@@ -2194,55 +2221,6 @@ bool ZoneDatabase::SetZoneTZ(uint32 zoneid, uint32 version, uint32 tz) {
 }
 //End new timezone functions.
 
-
-//Functions for weather
-uint8 ZoneDatabase::GetZoneWeather(uint32 zoneid, uint32 version) {
-	char errbuf[MYSQL_ERRMSG_SIZE];
-	char *query = 0;
-	MYSQL_RES *result;
-	MYSQL_ROW row;
-
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT weather FROM zone WHERE zoneidnumber=%i AND (version=%i OR version=0) ORDER BY version DESC", zoneid, version), errbuf, &result))
-	{
-		safe_delete_array(query);
-		if (mysql_num_rows(result) > 0) {
-			row = mysql_fetch_row(result);
-			uint8 tmp = atoi(row[0]);
-			mysql_free_result(result);
-			return tmp;
-		}
-		mysql_free_result(result);
-	}
-
-	else {
-		std::cerr << "Error in GetZoneWeather query '" << query << "' " << errbuf << std::endl;
-		safe_delete_array(query);
-	}
-	return 0;
-}
-
-bool ZoneDatabase::SetZoneWeather(uint32 zoneid, uint32 version, uint8 w) {
-	char errbuf[MYSQL_ERRMSG_SIZE];
-	char *query = 0;
-	uint32 affected_rows = 0;
-
-	if (RunQuery(query, MakeAnyLenString(&query, "UPDATE zone SET weather=%i WHERE zoneidnumber=%i AND version=%i", w, zoneid, version), errbuf, 0, &affected_rows)) {
-		safe_delete_array(query);
-		if (affected_rows == 1)
-			return true;
-		else
-			return false;
-	}
-	else {
-		std::cerr << "Error in SetZoneWeather query '" << query << "' " << errbuf << std::endl;
-		safe_delete_array(query);
-		return false;
-	}
-
-	return false;
-}
-//End weather functions.
-
 /*
  solar: this is never actually called, client_process starts an async query
  instead and uses GetAccountInfoForLogin_result to process it..
@@ -2514,9 +2492,9 @@ void ZoneDatabase::ListAllInstances(Client* c, uint32 charid)
 	MYSQL_ROW row;
 
 
-	if (RunQuery(query,MakeAnyLenString(&query, "SELECT instance_lockout.id, zone, version FROM instance_lockout JOIN"
-		" instance_lockout_player ON instance_lockout.id = instance_lockout_player.id"
-		" WHERE instance_lockout_player.charid=%lu", (unsigned long)charid),errbuf,&result))
+	if (RunQuery(query,MakeAnyLenString(&query, "SELECT instance_list.id, zone, version FROM instance_list JOIN"
+		" instance_list_player ON instance_list.id = instance_list_player.id"
+		" WHERE instance_list_player.charid=%lu", (unsigned long)charid),errbuf,&result))
 	{
 		safe_delete_array(query);
 
@@ -2596,11 +2574,11 @@ void ZoneDatabase::SaveBuffs(Client *c) {
 	for (int i = 0; i < buff_count; i++) {
 		if(buffs[i].spellid != SPELL_UNKNOWN) {
 			if(!database.RunQuery(query, MakeAnyLenString(&query, "INSERT INTO `character_buffs` (character_id, slot_id, spell_id, "
-				"caster_level, caster_name, ticsremaining, counters, numhits, melee_rune, magic_rune, persistent, death_save_chance, "
-				"death_save_aa_chance) VALUES('%u', '%u', '%u', '%u', '%s', '%u', '%u', '%u', '%u', '%u', '%u', '%u', '%u')",
+				"caster_level, caster_name, ticsremaining, counters, numhits, melee_rune, magic_rune, persistent, dot_rune, "
+				"caston_x, caston_y, caston_z, ExtraDIChance) VALUES('%u', '%u', '%u', '%u', '%s', '%u', '%u', '%u', '%u', '%u', '%u', '%u', '%i', '%i', '%i', '%i')",
 				c->CharacterID(), i, buffs[i].spellid, buffs[i].casterlevel, buffs[i].caster_name, buffs[i].ticsremaining,
 				buffs[i].counters, buffs[i].numhits, buffs[i].melee_rune, buffs[i].magic_rune, buffs[i].persistant_buff,
-				buffs[i].deathSaveSuccessChance, buffs[i].deathsaveCasterAARank),
+				buffs[i].dot_rune, buffs[i].caston_x, buffs[i].caston_y, buffs[i].caston_z, buffs[i].ExtraDIChance),
 				errbuf)) {
 				LogFile->write(EQEMuLog::Error, "Error in SaveBuffs query '%s': %s", query, errbuf);
 			}
@@ -2622,7 +2600,7 @@ void ZoneDatabase::LoadBuffs(Client *c) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	if (RunQuery(query, MakeAnyLenString(&query, "SELECT spell_id, slot_id, caster_level, caster_name, ticsremaining, counters, "
-		"numhits, melee_rune, magic_rune, persistent, death_save_chance, death_save_aa_chance FROM `character_buffs` WHERE "
+		"numhits, melee_rune, magic_rune, persistent, dot_rune, caston_x, caston_y, caston_z, ExtraDIChance FROM `character_buffs` WHERE "
 		"`character_id`='%u'",
 		c->CharacterID()), errbuf, &result))
 	{
@@ -2647,8 +2625,11 @@ void ZoneDatabase::LoadBuffs(Client *c) {
 			uint32 melee_rune = atoul(row[7]);
 			uint32 magic_rune = atoul(row[8]);
 			uint8 persistent = atoul(row[9]);
-			uint32 death_save_chance = atoul(row[10]);
-			uint32 death_save_aa_chance = atoul(row[11]);
+			uint32 dot_rune = atoul(row[10]);
+			int32 caston_x = atoul(row[11]);
+			int32 caston_y = atoul(row[12]);
+			int32 caston_z = atoul(row[13]);
+			int32 ExtraDIChance = atoul(row[14]);
 
 			buffs[slot_id].spellid = spell_id;
 			buffs[slot_id].casterlevel = caster_level;
@@ -2668,8 +2649,11 @@ void ZoneDatabase::LoadBuffs(Client *c) {
 			buffs[slot_id].melee_rune = melee_rune;
 			buffs[slot_id].magic_rune = magic_rune;
 			buffs[slot_id].persistant_buff = persistent ? true : false;
-			buffs[slot_id].deathSaveSuccessChance = death_save_chance;
-			buffs[slot_id].deathsaveCasterAARank = death_save_aa_chance;
+			buffs[slot_id].dot_rune = dot_rune;
+			buffs[slot_id].caston_x = caston_x;
+			buffs[slot_id].caston_y = caston_y;
+			buffs[slot_id].caston_z = caston_z;
+			buffs[slot_id].ExtraDIChance = ExtraDIChance;
 			buffs[slot_id].UpdateClient = false;
 			if(IsRuneSpell(spell_id)) {
 				c->SetHasRune(true);
@@ -2678,11 +2662,6 @@ void ZoneDatabase::LoadBuffs(Client *c) {
 				c->SetHasSpellRune(true);
 			}
 
-			/*
-			if(IsDeathSaveSpell(spell_id)) {
-				c->SetDeathSaveChance(true);
-			}
-			*/
 		}
 		mysql_free_result(result);
 	}
@@ -2742,11 +2721,11 @@ void ZoneDatabase::SavePetInfo(Client *c) {
 	safe_delete_array(query);
 
 	if(!database.RunQuery(query, MakeAnyLenString(&query,
-		"INSERT INTO `character_pet_info` (`char_id`, `pet`, `petname`, `petpower`, `spell_id`, `hp`, `mana`) "
-		"values (%u, 0, '%s', %i, %u, %u, %u) "
-		"ON DUPLICATE KEY UPDATE `petname`='%s', `petpower`=%i, `spell_id`=%u, `hp`=%u, `mana`=%u",
-		c->CharacterID(), petinfo->Name, petinfo->petpower, petinfo->SpellID, petinfo->HP, petinfo->Mana,
-		petinfo->Name, petinfo->petpower, petinfo->SpellID, petinfo->HP, petinfo->Mana),
+		"INSERT INTO `character_pet_info` (`char_id`, `pet`, `petname`, `petpower`, `spell_id`, `hp`, `mana`, `size`) "
+		"values (%u, 0, '%s', %i, %u, %u, %u, %f) "
+		"ON DUPLICATE KEY UPDATE `petname`='%s', `petpower`=%i, `spell_id`=%u, `hp`=%u, `mana`=%u, `size`=%f",
+		c->CharacterID(), petinfo->Name, petinfo->petpower, petinfo->SpellID, petinfo->HP, petinfo->Mana, petinfo->size,
+		petinfo->Name, petinfo->petpower, petinfo->SpellID, petinfo->HP, petinfo->Mana, petinfo->size),
 		errbuf))
 	{
 		safe_delete_array(query);
@@ -2789,11 +2768,11 @@ void ZoneDatabase::SavePetInfo(Client *c) {
 
 
 	if(!database.RunQuery(query, MakeAnyLenString(&query,
-		"INSERT INTO `character_pet_info` (`char_id`, `pet`, `petname`, `petpower`, `spell_id`, `hp`, `mana`) "
-		"values (%u, 1, '%s', %u, %u, %u, %u) "
-		"ON DUPLICATE KEY UPDATE `petname`='%s', `petpower`=%i, `spell_id`=%u, `hp`=%u, `mana`=%u",
-		c->CharacterID(), suspended->Name, suspended->petpower, suspended->SpellID, suspended->HP, suspended->Mana,
-		suspended->Name, suspended->petpower, suspended->SpellID, suspended->HP, suspended->Mana),
+		"INSERT INTO `character_pet_info` (`char_id`, `pet`, `petname`, `petpower`, `spell_id`, `hp`, `mana`, `size`) "
+		"values (%u, 1, '%s', %u, %u, %u, %u, %f) "
+		"ON DUPLICATE KEY UPDATE `petname`='%s', `petpower`=%i, `spell_id`=%u, `hp`=%u, `mana`=%u, `size`=%f",
+		c->CharacterID(), suspended->Name, suspended->petpower, suspended->SpellID, suspended->HP, suspended->Mana, suspended->size,
+		suspended->Name, suspended->petpower, suspended->SpellID, suspended->HP, suspended->Mana, suspended->size),
 		errbuf))
 	{
 		safe_delete_array(query);
@@ -2839,7 +2818,7 @@ void ZoneDatabase::LoadPetInfo(Client *c) {
 	memset(suspended, 0, sizeof(PetInfo));
 
 	if(database.RunQuery(query, MakeAnyLenString(&query,
-		"SELECT `pet`, `petname`, `petpower`, `spell_id`, `hp`, `mana` from `character_pet_info` where `char_id`=%u",
+		"SELECT `pet`, `petname`, `petpower`, `spell_id`, `hp`, `mana`, `size` from `character_pet_info` where `char_id`=%u",
 		c->CharacterID()), errbuf, &result))
 	{
 		safe_delete_array(query);
@@ -2857,6 +2836,7 @@ void ZoneDatabase::LoadPetInfo(Client *c) {
 			pi->SpellID = atoi(row[3]);
 			pi->HP = atoul(row[4]);
 			pi->Mana = atoul(row[5]);
+			pi->size = atof(row[6]);
 		}
 		mysql_free_result(result);
 	}
@@ -3189,7 +3169,7 @@ bool ZoneDatabase::GetFactionIdsForNPC(uint32 nfl_id, std::list<struct NPCFactio
 		std::list<struct NPCFaction*>::iterator cur,end;
 		cur = faction_list->begin();
 		end = faction_list->end();
-		for(; cur != end; cur++) {
+		for(; cur != end; ++cur) {
 			struct NPCFaction* tmp = *cur;
 			safe_delete(tmp);
 		}
@@ -3208,7 +3188,7 @@ bool ZoneDatabase::GetFactionIdsForNPC(uint32 nfl_id, std::list<struct NPCFactio
 	std::list<struct NPCFaction*>::iterator cur,end;
 	cur = faction_list->begin();
 	end = faction_list->end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		struct NPCFaction* tmp = *cur;
 		safe_delete(tmp);
 	}

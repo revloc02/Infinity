@@ -40,6 +40,18 @@ public:
 	enum eStandingPetOrder { SPO_Follow, SPO_Sit, SPO_Guard };
 
 	struct SpecialAbility {
+		SpecialAbility() {
+			level = 0;
+			timer = nullptr;
+			for(int i = 0; i < MAX_SPECIAL_ATTACK_PARAMS; ++i) {
+				params[i] = 0;
+			}
+		}
+
+		~SpecialAbility() {
+			safe_delete(timer);
+		}
+
 		int level;
 		Timer *timer;
 		int params[MAX_SPECIAL_ATTACK_PARAMS];
@@ -84,7 +96,7 @@ public:
 		uint32		in_drakkin_heritage,
 		uint32		in_drakkin_tattoo,
 		uint32		in_drakkin_details,
-		uint32		in_armor_tint[MAX_MATERIALS],
+		uint32		in_armor_tint[_MaterialCount],
 		uint8		in_aa_title,
 		uint8		in_see_invis, // see through invis
 		uint8		in_see_invis_undead, // see through invis vs. undead
@@ -106,7 +118,13 @@ public:
 	//Attack
 	virtual void RogueBackstab(Mob* other, bool min_damage = false, int ReuseTime = 10);
 	virtual void RogueAssassinate(Mob* other); // solar
-	bool BehindMob(Mob* other = 0, float playerx = 0.0f, float playery = 0.0f) const;
+	float MobAngle(Mob *other = 0, float ourx = 0.0f, float oury = 0.0f) const;
+	// greater than 90 is behind
+	inline bool BehindMob(Mob *other = 0, float ourx = 0.0f, float oury = 0.0f) const
+		{ return (!other || other == this) ? true : MobAngle(other, ourx, oury) > 90.0f; }
+	// less than 56 is in front, greater than 56 is usually where the client generates the messages
+	inline bool InFrontMob(Mob *other = 0, float ourx = 0.0f, float oury = 0.0f) const
+		{ return (!other || other == this) ? true : MobAngle(other, ourx, oury) < 56.0f; }
 	virtual void RangedAttack(Mob* other) { }
 	virtual void ThrowingAttack(Mob* other) { }
 	uint16 GetThrownDamage(int16 wDmg, int32& TotalDmg, int& minDmg);
@@ -117,18 +135,22 @@ public:
 	virtual void TryBackstab(Mob *other,int ReuseTime = 10);
 	void TriggerDefensiveProcs(const ItemInst* weapon, Mob *on, uint16 hand = 13, int damage = 0);
 	virtual bool AvoidDamage(Mob* attacker, int32 &damage, bool CanRiposte = true);
-	virtual bool CheckHitChance(Mob* attacker, SkillType skillinuse, int Hand, int16 chance_mod = 0);
+	virtual bool CheckHitChance(Mob* attacker, SkillUseTypes skillinuse, int Hand, int16 chance_mod = 0);
 	virtual void TryCriticalHit(Mob *defender, uint16 skill, int32 &damage, ExtraAttackOptions *opts = nullptr);
 	void TryPetCriticalHit(Mob *defender, uint16 skill, int32 &damage);
-	virtual bool TryFinishingBlow(Mob *defender, SkillType skillinuse);
-	virtual bool TryHeadShot(Mob* defender, SkillType skillInUse);
+	virtual bool TryFinishingBlow(Mob *defender, SkillUseTypes skillinuse);
+	virtual bool TryHeadShot(Mob* defender, SkillUseTypes skillInUse);
 	virtual void DoRiposte(Mob* defender);
 	void ApplyMeleeDamageBonus(uint16 skill, int32 &damage);
 	virtual void MeleeMitigation(Mob *attacker, int32 &damage, int32 minhit, ExtraAttackOptions *opts = nullptr);
+	virtual int32 GetMeleeMitDmg(Mob *attacker, int32 damage, int32 minhit, float mit_rating, float atk_rating);
 	bool CombatRange(Mob* other);
+	virtual inline bool IsBerserk() { return false; } // only clients
+	void RogueEvade(Mob *other);
 
 	//Appearance
 	void SendLevelAppearance();
+	void SendStunAppearance();
 	void SendAppearanceEffect(uint32 parm1, uint32 parm2, uint32 parm3, uint32 parm4, uint32 parm5,
 		Client *specific_target=nullptr);
 	void SendTargetable(bool on, Client *specific_target = nullptr);
@@ -147,7 +169,7 @@ public:
 	inline bool SeeImprovedHide() const { return see_improved_hide; }
 	bool IsInvisible(Mob* other = 0) const;
 	void SetInvisible(uint8 state);
-	bool AttackAnimation(SkillType &skillinuse, int Hand, const ItemInst* weapon);
+	bool AttackAnimation(SkillUseTypes &skillinuse, int Hand, const ItemInst* weapon);
 
 	//Song
 	bool UseBardSpellLogic(uint16 spell_id = 0xffff, int slot = -1);
@@ -163,13 +185,13 @@ public:
 		bool item_bonus = false, uint32 ticsremaining = 0, int buffslot = -1);
 	void NegateSpellsBonuses(uint16 spell_id);
 	virtual float GetActSpellRange(uint16 spell_id, float range, bool IsBard = false) { return range;}
-	virtual int32 GetActSpellDamage(uint16 spell_id, int32 value) { return value; }
-	virtual int32 GetActSpellHealing(uint16 spell_id, int32 value) { return value; }
+	virtual int32 GetActSpellDamage(uint16 spell_id, int32 value, Mob* target = nullptr) { return value; }
+	virtual int32 GetActSpellHealing(uint16 spell_id, int32 value, Mob* target = nullptr) { return value; }
 	virtual int32 GetActSpellCost(uint16 spell_id, int32 cost){ return cost;}
 	virtual int32 GetActSpellDuration(uint16 spell_id, int32 duration){ return duration;}
 	virtual int32 GetActSpellCasttime(uint16 spell_id, int32 casttime);
 	float ResistSpell(uint8 resist_type, uint16 spell_id, Mob *caster, bool use_resist_override = false,
-		int resist_override = 0, bool CharismaCheck = false);
+		int resist_override = 0, bool CharismaCheck = false, bool CharmTick = false);
 	uint16 GetSpecializeSkillValue(uint16 spell_id) const;
 	void SendSpellBarDisable();
 	void SendSpellBarEnable(uint16 spellid);
@@ -191,12 +213,15 @@ public:
 	virtual bool DetermineSpellTargets(uint16 spell_id, Mob *&spell_target, Mob *&ae_center,
 		CastAction_type &CastAction);
 	virtual bool CheckFizzle(uint16 spell_id);
+	virtual bool CheckSpellLevelRestriction(uint16 spell_id);
 	virtual bool IsImmuneToSpell(uint16 spell_id, Mob *caster);
 	virtual float GetAOERange(uint16 spell_id);
 	void InterruptSpell(uint16 spellid = SPELL_UNKNOWN);
 	void InterruptSpell(uint16, uint16, uint16 spellid = SPELL_UNKNOWN);
 	inline bool IsCasting() const { return((casting_spell_id != 0)); }
 	uint16 CastingSpellID() const { return casting_spell_id; }
+	bool DoCastingChecks();
+	bool TryDispel(uint8 caster_level, uint8 buff_level, int level_modifier);
 
 	//Buff
 	void BuffProcess();
@@ -204,6 +229,7 @@ public:
 	void BuffFadeBySpellID(uint16 spell_id);
 	void BuffFadeByEffect(int effectid, int skipslot = -1);
 	void BuffFadeAll();
+	void BuffFadeNonPersistDeath();
 	void BuffFadeDetrimental();
 	void BuffFadeBySlot(int slot, bool iRecalcBonuses = true);
 	void BuffFadeDetrimentalByCaster(Mob *caster);
@@ -241,9 +267,9 @@ public:
 	int16 GetBuffSlotFromType(uint16 type);
 	uint16 GetSpellIDFromSlot(uint8 slot);
 	int CountDispellableBuffs();
-	bool HasBuffIcon(Mob* caster, Mob* target, uint16 spell_id);
-	bool CheckHitsRemaining(uint32 buff_slot, bool when_spell_done=false, bool negate=false,uint16 type=0,
-		uint16 spell_id=0, bool use_skill=false,uint16 skill=0);
+	void CheckNumHitsRemaining(uint8 type, uint32 buff_slot=0, uint16 spell_id=SPELL_UNKNOWN);
+	bool HasNumhits() const { return has_numhits; }
+	inline void Numhits(bool val) { has_numhits = val; }
 	void SpreadVirus(uint16 spell_id, uint16 casterID);
 	bool IsNimbusEffectActive(uint32 nimbus_effect);
 	void SetNimbusEffect(uint32 nimbus_effect);
@@ -257,20 +283,22 @@ public:
 	void TempName(const char *newname = nullptr);
 	void SetTargetable(bool on);
 	bool IsTargetable() const { return m_targetable; }
-	virtual uint16 GetSkill(SkillType skill_num) const { return 0; }
+	bool HasShieldEquiped() const { return has_shieldequiped; }
+	inline void ShieldEquiped(bool val) { has_shieldequiped = val; }
+	virtual uint16 GetSkill(SkillUseTypes skill_num) const { return 0; }
 	virtual uint32 GetEquipment(uint8 material_slot) const { return(0); }
 	virtual int32 GetEquipmentMaterial(uint8 material_slot) const;
 	virtual uint32 GetEquipmentColor(uint8 material_slot) const;
 	virtual uint32 IsEliteMaterialItem(uint8 material_slot) const;
 	bool AffectedBySpellExcludingSlot(int slot, int effect);
-	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillType attack_skill) = 0;
-	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillType attack_skill,
+	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillUseTypes attack_skill) = 0;
+	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillUseTypes attack_skill,
 		bool avoidable = true, int8 buffslot = -1, bool iBuffTic = false) = 0;
 	inline virtual void SetHP(int32 hp) { if (hp >= max_hp) cur_hp = max_hp; else cur_hp = hp;}
 	bool ChangeHP(Mob* other, int32 amount, uint16 spell_id = 0, int8 buffslot = -1, bool iBuffTic = false);
 	inline void SetOOCRegen(int32 newoocregen) {oocregen = newoocregen;}
 	virtual void Heal();
-	virtual void HealDamage(uint32 ammount, Mob* caster = nullptr);
+	virtual void HealDamage(uint32 ammount, Mob* caster = nullptr, uint16 spell_id = SPELL_UNKNOWN);
 	virtual void SetMaxHP() { cur_hp = max_hp; }
 	virtual inline uint16 GetBaseRace() const { return base_race; }
 	virtual inline uint8 GetBaseGender() const { return base_gender; }
@@ -289,7 +317,7 @@ public:
 	inline uint8 GetDrakkinHeritage() const { return drakkin_heritage; }
 	inline uint8 GetDrakkinTattoo() const { return drakkin_tattoo; }
 	inline uint8 GetDrakkinDetails() const { return drakkin_details; }
-	inline uint32 GetArmorTint(uint8 i) const { return armor_tint[(i < MAX_MATERIALS) ? i : 0]; }
+	inline uint32 GetArmorTint(uint8 i) const { return armor_tint[(i < _MaterialCount) ? i : 0]; }
 	inline uint8 GetClass() const { return class_; }
 	inline uint8 GetLevel() const { return level; }
 	inline const char* GetName() const { return name; }
@@ -401,6 +429,8 @@ public:
 		bool bFrenzy = false, bool iBuffTic = false);
 	bool RemoveFromHateList(Mob* mob);
 	void SetHate(Mob* other, int32 hate = 0, int32 damage = 0) { hate_list.Set(other,hate,damage);}
+	void HalveAggro(Mob *other) { uint32 in_hate = GetHateAmount(other); SetHate(other, (in_hate > 1 ? in_hate / 2 : 1)); }
+	void DoubleAggro(Mob *other) { uint32 in_hate = GetHateAmount(other); SetHate(other, (in_hate ? in_hate * 2 : 1)); }
 	uint32 GetHateAmount(Mob* tmob, bool is_dam = false) { return hate_list.GetEntHate(tmob,is_dam);}
 	uint32 GetDamageAmount(Mob* tmob) { return hate_list.GetEntHate(tmob, true);}
 	Mob* GetHateTop() { return hate_list.GetTop(this);}
@@ -443,7 +473,7 @@ public:
 	static uint8 GetDefaultGender(uint16 in_race, uint8 in_gender = 0xFF);
 	uint16 GetSkillByItemType(int ItemType);
 	virtual void MakePet(uint16 spell_id, const char* pettype, const char *petname = nullptr);
-	virtual void MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower, const char *petname = nullptr);
+	virtual void MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower, const char *petname = nullptr, float in_size = 0.0f);
 	bool IsWarriorClass() const;
 	char GetCasterClass() const;
 	uint8 GetArchetype() const;
@@ -471,7 +501,7 @@ public:
 	bool AddSkillProc(uint16 spell_id, uint16 iChance = 3, uint16 base_spell_id = SPELL_UNKNOWN);
 	bool RemoveSkillProc(uint16 spell_id, bool bAll = false);
 	bool HasSkillProcs() const;
-	bool AddProcToWeapon(uint16 spell_id, bool bPerma = false, uint16 iChance = 3);
+	bool AddProcToWeapon(uint16 spell_id, bool bPerma = false, uint16 iChance = 3, uint16 base_spell_id = SPELL_UNKNOWN);
 	bool RemoveProcFromWeapon(uint16 spell_id, bool bAll = false);
 	bool HasProcs() const;
 
@@ -495,6 +525,13 @@ public:
 	virtual void Message_StringID(uint32 type, uint32 string_id, const char* message, const char* message2 = 0,
 		const char* message3 = 0, const char* message4 = 0, const char* message5 = 0, const char* message6 = 0,
 		const char* message7 = 0, const char* message8 = 0, const char* message9 = 0, uint32 distance = 0) { }
+	virtual void FilteredMessage_StringID(Mob *sender, uint32 type, eqFilterType filter, uint32 string_id) { }
+	virtual void FilteredMessage_StringID(Mob *sender, uint32 type, eqFilterType filter,
+			uint32 string_id, const char *message1, const char *message2 = nullptr,
+			const char *message3 = nullptr, const char *message4 = nullptr,
+			const char *message5 = nullptr, const char *message6 = nullptr,
+			const char *message7 = nullptr, const char *message8 = nullptr,
+			const char *message9 = nullptr) { }
 	void Say(const char *format, ...);
 	void Say_StringID(uint32 string_id, const char *message3 = 0, const char *message4 = 0, const char *message5 = 0,
 		const char *message6 = 0, const char *message7 = 0, const char *message8 = 0, const char *message9 = 0);
@@ -529,15 +566,16 @@ public:
 	void TriggerOnCast(uint32 focus_spell, uint32 spell_id, bool aa_trigger);
 	void TrySpellTrigger(Mob *target, uint32 spell_id);
 	void TryApplyEffect(Mob *target, uint32 spell_id);
+	void TryTriggerOnValueAmount(bool IsHP = false, bool IsMana = false, bool IsEndur = false, bool IsPet = false);
 	void TryTwincast(Mob *caster, Mob *target, uint32 spell_id);
 	void TrySympatheticProc(Mob *target, uint32 spell_id);
 	bool TryFadeEffect(int slot);
 	uint16 GetSpellEffectResistChance(uint16 spell_id);
-	int16 GetHealRate(uint16 spell_id);
-	int16 GetCriticalHealRate(uint16 spell_id);
-	int32 GetVulnerability(int32 damage, Mob *caster, uint32 spell_id, uint32 ticsremaining);
-	int32 GetAdditionalDamage(Mob *caster, uint32 spell_id, bool use_skill = false, uint16 skill=0);
-	int16 GetSkillDmgTaken(const SkillType skill_used);
+	int16 GetHealRate(uint16 spell_id, Mob* caster = nullptr);
+	int32 GetVulnerability(Mob* caster, uint32 spell_id, uint32 ticsremaining);
+	int32 GetFcDamageAmtIncoming(Mob *caster, uint32 spell_id, bool use_skill = false, uint16 skill=0);
+	int32 GetFocusIncoming(focusType type, int effect, Mob *caster, uint32 spell_id);
+	int16 GetSkillDmgTaken(const SkillUseTypes skill_used);
 	void DoKnockback(Mob *caster, uint32 pushback, uint32 pushup);
 	int16 CalcResistChanceBonus();
 	int16 CalcFearResistChance();
@@ -558,9 +596,14 @@ public:
 	bool CanBlockSpell() const { return(spellbonuses.BlockNextSpell); }
 	bool DoHPToManaCovert(uint16 mana_cost = 0);
 	int32 ApplySpellEffectiveness(Mob* caster, int16 spell_id, int32 value, bool IsBard = false);
+	int8 GetDecayEffectValue(uint16 spell_id, uint16 spelleffect); 
+	int32 GetExtraSpellAmt(uint16 spell_id, int32 extra_spell_amt, int32 base_spell_dmg);
+	void MeleeLifeTap(int32 damage);
+	bool PassCastRestriction(bool UseCastRestriction = true, int16 value = 0, bool IsDamage = true);
+	bool ImprovedTaunt();
 
-	void ModSkillDmgTaken(SkillType skill_num, int value);
-	int16 GetModSkillDmgTaken(const SkillType skill_num);
+	void ModSkillDmgTaken(SkillUseTypes skill_num, int value);
+	int16 GetModSkillDmgTaken(const SkillUseTypes skill_num);
 	void ModVulnerability(uint8 resist, int16 value);
 	int16 GetModVulnerability(const uint8 resist);
 
@@ -623,7 +666,7 @@ public:
 	virtual int GetHaste();
 
 	uint8 GetWeaponDamageBonus(const Item_Struct* Weapon);
-	uint16 GetDamageTable(SkillType skillinuse);
+	uint16 GetDamageTable(SkillUseTypes skillinuse);
 	virtual int GetMonkHandToHandDamage(void);
 
 	bool CanThisClassDoubleAttack(void) const;
@@ -640,14 +683,14 @@ public:
 	inline bool IsStunned() const { return stunned; }
 	inline bool IsSilenced() const { return silenced; }
 	inline bool IsAmnesiad() const { return amnesiad; }
-	inline uint16 GetErrorNumber() const {return adverrorinfo;}
 
 	int32 ReduceDamage(int32 damage);
 	int32 AffectMagicalDamage(int32 damage, uint16 spell_id, const bool iBuffTic, Mob* attacker);
+	int32 ReduceAllDamage(int32 damage);
 
-	virtual void DoSpecialAttackDamage(Mob *who, SkillType skill, int32 max_damage, int32 min_damage = 1, int32 hate_override = -1, int ReuseTime = 10, bool HitChance=false);
+	virtual void DoSpecialAttackDamage(Mob *who, SkillUseTypes skill, int32 max_damage, int32 min_damage = 1, int32 hate_override = -1, int ReuseTime = 10, bool HitChance=false);
 	virtual void DoThrowingAttackDmg(Mob* other, const ItemInst* RangeWeapon=nullptr, const Item_Struct* item=nullptr, uint16 weapon_damage=0, int16 chance_mod=0,int16 focus=0);
-	virtual void DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillType skillinuse, int16 chance_mod=0, int16 focus=0, bool CanRiposte=false);
+	virtual void DoMeleeSkillAttackDmg(Mob* other, uint16 weapon_damage, SkillUseTypes skillinuse, int16 chance_mod=0, int16 focus=0, bool CanRiposte=false);
 	virtual void DoArcheryAttackDmg(Mob* other, const ItemInst* RangeWeapon=nullptr, const ItemInst* Ammo=nullptr, uint16 weapon_damage=0, int16 chance_mod=0, int16 focus=0);
 	bool CanDoSpecialAttack(Mob *other);
 	bool Flurry(ExtraAttackOptions *opts);
@@ -748,8 +791,8 @@ public:
 	bool Charmed() const { return charmed; }
 	static uint32 GetLevelHP(uint8 tlevel);
 	uint32 GetZoneID() const; //for perl
-	virtual int32 CheckAggroAmount(uint16 spellid, bool isproc = false);
-	virtual int32 CheckHealAggroAmount(uint16 spellid, uint32 heal_possible = 0);
+	virtual int32 CheckAggroAmount(uint16 spell_id, bool isproc = false);
+	virtual int32 CheckHealAggroAmount(uint16 spell_id, uint32 heal_possible = 0);
 	virtual uint32 GetAA(uint32 aa_id) const { return(0); }
 
 	uint16 GetInstrumentMod(uint16 spell_id) const;
@@ -761,7 +804,7 @@ public:
 	// HP Event
 	inline int GetNextHPEvent() const { return nexthpevent; }
 	void SetNextHPEvent( int hpevent );
-	void SendItemAnimation(Mob *to, const Item_Struct *item, SkillType skillInUse);
+	void SendItemAnimation(Mob *to, const Item_Struct *item, SkillUseTypes skillInUse);
 	inline int& GetNextIncHPEvent() { return nextinchpevent; }
 	void SetNextIncHPEvent( int inchpevent );
 
@@ -811,7 +854,7 @@ public:
 
 	bool 	HasSpellEffect(int effectid);
 	int 	mod_effect_value(int effect_value, uint16 spell_id, int effect_type, Mob* caster);
-	float 	mod_hit_chance(float chancetohit, SkillType skillinuse, Mob* attacker);
+	float 	mod_hit_chance(float chancetohit, SkillUseTypes skillinuse, Mob* attacker);
 	float 	mod_riposte_chance(float ripostchance, Mob* attacker);
 	float	mod_block_chance(float blockchance, Mob* attacker);
 	float	mod_parry_chance(float parrychance, Mob* attacker);
@@ -822,7 +865,7 @@ public:
 	int32	mod_kick_damage(int32 dmg);
 	int32	mod_bash_damage(int32 dmg);
 	int32	mod_frenzy_damage(int32 dmg);
-	int32	mod_monk_special_damage(int32 ndamage, SkillType skill_type);
+	int32	mod_monk_special_damage(int32 ndamage, SkillUseTypes skill_type);
 	int32	mod_backstab_damage(int32 ndamage);
 	int		mod_archery_bonus_chance(int bonuschance, const ItemInst* RangeWeapon);
 	uint32	mod_archery_bonus_damage(uint32 MaxDmg, const ItemInst* RangeWeapon);
@@ -833,9 +876,10 @@ public:
 	int		mod_spell_stack(uint16 spellid1, int caster_level1, Mob* caster1, uint16 spellid2, int caster_level2, Mob* caster2);
 	int		mod_spell_resist(int resist_chance, int level_mod, int resist_modifier, int target_resist, uint8 resist_type, uint16 spell_id, Mob* caster);
 	void	mod_spell_cast(uint16 spell_id, Mob* spelltar, bool reflect, bool use_resist_adjust, int16 resist_adjust, bool isproc);
+	bool    mod_will_aggro(Mob *attacker, Mob *on);
 
 protected:
-	void CommonDamage(Mob* other, int32 &damage, const uint16 spell_id, const SkillType attack_skill, bool &avoidable, const int8 buffslot, const bool iBuffTic);
+	void CommonDamage(Mob* other, int32 &damage, const uint16 spell_id, const SkillUseTypes attack_skill, bool &avoidable, const int8 buffslot, const bool iBuffTic);
 	static uint16 GetProcID(uint16 spell_id, uint8 effect_index);
 	float _GetMovementSpeed(int mod) const;
 	virtual bool MakeNewPositionAndSendUpdate(float x, float y, float z, float speed, bool checkZ);
@@ -848,7 +892,7 @@ protected:
 	bool IsFullHP;
 	bool moved;
 
-	std::vector<std::string> RampageArray;
+	std::vector<uint16> RampageArray;
 	std::map<std::string, std::string> m_EntityVariables;
 
 	int16 SkillDmgTaken_Mod[HIGHEST_SKILL+2];
@@ -933,15 +977,16 @@ protected:
 	bool PassLimitClass(uint32 Classes_, uint16 Class_);
 	void TryDefensiveProc(const ItemInst* weapon, Mob *on, uint16 hand = 13, int damage=0);
 	void TryWeaponProc(const ItemInst* inst, const Item_Struct* weapon, Mob *on, uint16 hand = 13);
+	void TrySpellProc(const ItemInst* inst, const Item_Struct* weapon, Mob *on, uint16 hand = 13);
 	void TryWeaponProc(const ItemInst* weapon, Mob *on, uint16 hand = 13);
 	void ExecWeaponProc(const ItemInst* weapon, uint16 spell_id, Mob *on);
-	virtual float GetProcChances(float &ProcBonus, float &ProcChance, uint16 weapon_speed = 30, uint16 hand = 13);
+	virtual float GetProcChances(float ProcBonus, uint16 weapon_speed = 30, uint16 hand = 13);
 	virtual float GetDefensiveProcChances(float &ProcBonus, float &ProcChance, uint16 weapon_speed = 30, uint16 hand = 13);
 	int GetWeaponDamage(Mob *against, const Item_Struct *weapon_item);
 	int GetWeaponDamage(Mob *against, const ItemInst *weapon_item, uint32 *hate = nullptr);
 	int GetKickDamage();
 	int GetBashDamage();
-	virtual void ApplySpecialAttackMod(SkillType skill, int32 &dmg, int32 &mindmg);
+	virtual void ApplySpecialAttackMod(SkillUseTypes skill, int32 &dmg, int32 &mindmg);
 	bool HasDied();
 	void CalculateNewFearpoint();
 	float FindGroundZ(float new_x, float new_y, float z_offset=0.0);
@@ -998,6 +1043,7 @@ protected:
 	uint32 casting_spell_timer_duration;
 	uint32 casting_spell_type;
 	int16 casting_spell_resist_adjust;
+	bool casting_spell_checks;
 	uint16 bardsong;
 	uint8 bardsong_slot;
 	uint32 bardsong_target_id;
@@ -1022,7 +1068,7 @@ protected:
 	uint32 drakkin_heritage;
 	uint32 drakkin_tattoo;
 	uint32 drakkin_details;
-	uint32 armor_tint[MAX_MATERIALS];
+	uint32 armor_tint[_MaterialCount];
 
 	uint8 aa_title;
 
@@ -1040,6 +1086,8 @@ protected:
 	uint16 viral_spells[MAX_SPELL_TRIGGER*2]; // Stores the spell ids of the viruses on target and caster ids
 	int16 rooted_mod; //Modifier to root break chance, defined when root is cast on a target.
 	bool offhand;
+	bool has_shieldequiped;
+	bool has_numhits;
 
 	// Bind wound
 	Timer bindwound_timer;
@@ -1051,7 +1099,6 @@ protected:
 	Timer gravity_timer;
 	Timer viral_timer;
 	uint8 viral_timer_counter;
-	uint16 adverrorinfo;
 
 	// MobAI stuff
 	eStandingPetOrder pStandingPetOrder;
@@ -1157,7 +1204,7 @@ protected:
 	void InsertQuestGlobal(int charid, int npcid, int zoneid, const char *name, const char *value, int expdate);
 	uint16 emoteid;
 
-	std::map<int, SpecialAbility> SpecialAbilities;
+	SpecialAbility SpecialAbilities[MAX_SPECIAL_ATTACK];
 	bool bEnraged;
 	bool destructibleobject;
 

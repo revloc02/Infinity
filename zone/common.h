@@ -56,7 +56,7 @@ typedef enum {	//focus types
 	focusImprovedHeal,
 	focusImprovedDamage,
 	focusImprovedDOT,		//i dont know about this...
-	focusImprovedDamage2,
+	focusFcDamagePctCrit,
 	focusImprovedUndeadDamage,
 	focusPetPower,
 	focusResistRate,
@@ -65,21 +65,26 @@ typedef enum {	//focus types
 	focusSpellVulnerability,
 	focusTwincast,
 	focusSympatheticProc,
-	focusSpellDamage,
-	focusFF_Damage_Amount,
+	focusFcDamageAmt,
+	focusFcDamageAmtCrit,
 	focusSpellDurByTic,
 	focusSwarmPetDuration,
 	focusReduceRecastTime,
 	focusBlockNextSpell,
-	focusHealRate,
-	focusAdditionalDamage,
-	focusSpellEffectiveness,
+	focusFcHealPctIncoming,
+	focusFcDamageAmtIncoming,
+	focusFcHealAmtIncoming,
+	focusFcBaseEffects,
 	focusIncreaseNumHits,
-	focusCriticalHealRate,
-	focusAdditionalHeal2,
-	focusAdditionalHeal,
+	focusFcLimitUse,
+	focusFcMute,
+	focusFcTimerRefresh,
+	focusFcStunTimeMod,
+	focusFcHealPctCritIncoming,
+	focusFcHealAmt,
+	focusFcHealAmtCrit,
 } focusType; //Any new FocusType needs to be added to the Mob::IsFocus function
-#define HIGHEST_FOCUS	focusAdditionalHeal //Should always be last focusType in enum
+#define HIGHEST_FOCUS	focusFcHealAmtCrit //Should always be last focusType in enum
 
 enum {
 	SPECATK_SUMMON = 1,
@@ -116,7 +121,11 @@ enum {
 	LEASH = 32,
 	TETHER = 33,
 	DESTRUCTIBLE_OBJECT = 34,
-	NO_HARM_FROM_CLIENT = 35
+	NO_HARM_FROM_CLIENT = 35,
+	ALWAYS_FLEE = 36,
+	FLEE_PERCENT = 37,
+	MAX_SPECIAL_ATTACK = 38
+	
 };
 
 typedef enum {	//fear states
@@ -149,8 +158,11 @@ struct Buffs_Struct {
 	uint32	numhits; //the number of physical hits this buff can take before it fades away, lots of druid armor spells take advantage of this mixed with powerful effects
 	uint32	melee_rune;
 	uint32	magic_rune;
-	uint8	deathSaveSuccessChance;
-	uint8	deathsaveCasterAARank;
+	uint32	dot_rune;
+	int32	caston_x;
+	int32	caston_y;
+	int32	caston_z;
+	int32  ExtraDIChance;
 	bool	persistant_buff;
 	bool	client; //True if the caster is a client
 	bool	UpdateClient;
@@ -225,10 +237,12 @@ struct StatBonuses {
 	int		effective_casting_level;
 	int		reflect_chance;						// chance to reflect incoming spell
 	uint16	singingMod;
+	uint16	Amplification;						// stacks with singingMod
 	uint16	brassMod;
 	uint16	percussionMod;
 	uint16	windMod;
 	uint16	stringedMod;
+	uint16	songModCap;
 	int8	hatemod;
 	int32	EnduranceReduction;
 
@@ -237,6 +251,7 @@ struct StatBonuses {
 	int16	CriticalHitChance[HIGHEST_SKILL+2];	//i
 	int16	CriticalSpellChance;				//i
 	int16	SpellCritDmgIncrease;				//i
+	int16	SpellCritDmgIncNoStack;				// increase
 	int16	DotCritDmgIncrease;					//i
 	int16	CriticalHealChance;					//i
 	int16	CriticalHealOverTime;				//i
@@ -249,6 +264,7 @@ struct StatBonuses {
 	int16	DualWieldChance;					//i
 	int16	DoubleAttackChance;					//i
 	int16	TripleAttackChance;					//i
+	int16   DoubleRangedAttack;				//i
 	int16	ResistSpellChance;					//i
 	int16	ResistFearChance;					//i
 	bool	Fearless;							//i
@@ -261,6 +277,7 @@ struct StatBonuses {
 	int16	DamageModifier[HIGHEST_SKILL+2];	//i
 	int16	MinDamageModifier[HIGHEST_SKILL+2]; //i
 	int16	ProcChance;							// ProcChance/10 == % increase i = CombatEffects
+	int16	ProcChanceSPA;						// ProcChance from spell effects
 	int16	ExtraAttackChance;
 	int16	DoTShielding;
 	int16	DivineSaveChance[2];				// Second Chance (base1 = chance, base2 = spell on trigger)
@@ -298,8 +315,8 @@ struct StatBonuses {
 	//uint16	BlockSpellEffect[EFFECT_COUNT];		// Prevents spells with certain effects from landing on you *no longer used
 	bool	ImmuneToFlee;						// Bypass the fleeing flag
 	uint16	VoiceGraft;							// Stores the ID of the mob with which to talk through
-	uint16	SpellProcChance;					// chance to proc from sympathetic spell effects
-	uint16	CharmBreakChance;					// chance to break charm
+	int16	SpellProcChance;					// chance to proc from sympathetic spell effects
+	int16	CharmBreakChance;					// chance to break charm
 	int16	SongRange;							// increases range of beneficial bard songs
 	uint16	HPToManaConvert;					// Uses HP to cast spells at specific conversion
 	uint16	FocusEffects[HIGHEST_FOCUS+1];		// Stores the focus effectid for each focustype you have.
@@ -307,10 +324,22 @@ struct StatBonuses {
 	int16	SkillDamageAmount2[HIGHEST_SKILL+2];	// Adds skill specific damage
 	uint16	NegateAttacks[2];					// 0 = bool HasEffect 1 = Buff Slot
 	uint16	MitigateMeleeRune[2];				// 0 = Mitigation value 1 = Buff Slot
+	uint16	MeleeThresholdGuard[3];				// 0 = Mitigation value 1 = Buff Slot 2 = Min damage to trigger.
+	uint16	SpellThresholdGuard[3];				// 0 = Mitigation value 1 = Buff Slot 2 = Min damage to trigger.
 	uint16	MitigateSpellRune[2];				// 0 = Mitigation value 1 = Buff Slot
+	uint16	MitigateDotRune[2];					// 0 = Mitigation value 1 = Buff Slot
+	uint32	TriggerMeleeThreshold[3];			// 0 = Spell Effect ID 1 = Buff slot 2 = Damage Amount to Trigger
+	uint32	TriggerSpellThreshold[3];			// 0 = Spell Effect ID 1 = Buff slot 2 = Damage Amount to Trigger
 	uint16	ManaAbsorbPercentDamage[2];			// 0 = Mitigation value 1 = Buff Slot
 	int16	ShieldBlock;						// Chance to Shield Block
 	int16	BlockBehind;						// Chance to Block Behind (with our without shield)
+	bool	CriticalRegenDecay;					// increase critical regen chance, decays based on spell level cast
+	bool	CriticalHealDecay;					// increase critical heal chance, decays based on spell level cast
+	bool	CriticalDotDecay;					// increase critical dot chance, decays based on spell level cast
+	bool	DivineAura;							// invulnerability
+	bool	DistanceRemoval;					// Check if Cancle if Moved effect is present
+	int16	ImprovedTaunt[3];					// 0 = Max Level 1 = Aggro modifier 2 = buffid
+	int16	FrenziedDevastation;				// base1= AArank(used) base2= chance increase spell criticals + all DD spells 2x mana.
 	//bool	AbsorbMagicAtt;						// Magic Rune *Need to be implemented for NegateEffect
 	//bool	MeleeRune;							// Melee Rune *Need to be implemented for NegateEffect
 
@@ -356,6 +385,12 @@ struct StatBonuses {
 	int16	ItemATKCap;							// Raise item attack cap
 	int32	FinishingBlow[2];					// Chance to do a finishing blow for specified damage amount.
 	uint16	FinishingBlowLvl[2];				// Sets max level an NPC can be affected by FB. (base1 = lv, base2= ???)
+	int16	ShieldEquipHateMod;					// Hate mod when shield equiped.
+	int16	ShieldEquipDmgMod[2];				// Damage mod when shield equiped. 0 = damage modifier 1 = Unknown
+	bool	TriggerOnValueAmount;				// Triggers off various different conditions, bool to check if client has effect.
+	int8	StunBashChance;						// chance to stun with bash.	
+	int8	IncreaseChanceMemwipe;				// increases chance to memory wipe
+	int8	CriticalMend;						// chance critical monk mend
 };
 
 typedef struct

@@ -235,6 +235,13 @@ int main(int argc, char** argv) {
 	EQEmu::MemoryMappedFile *mmf = nullptr;
 	LoadSpells(&mmf);
 
+	_log(ZONE__INIT, "Loading base data");
+	if (!database.LoadBaseData()) {
+		_log(ZONE__INIT_ERR, "Loading base data FAILED!");
+		CheckEQEMuErrorAndPause();
+		return 1;
+	}
+
 	_log(ZONE__INIT, "Loading guilds");
 	guild_mgr.LoadGuilds();
 	_log(ZONE__INIT, "Loading factions");
@@ -329,11 +336,12 @@ int main(int argc, char** argv) {
 	bool worldwasconnected = worldserver.Connected();
 	EQStream* eqss;
 	EQStreamInterface *eqsi;
-	Timer temp_timer(10);
-	temp_timer.Start();
+	uint8 IDLEZONEUPDATE = 200;
+	uint8 ZONEUPDATE = 10;
+	Timer zoneupdate_timer(ZONEUPDATE);
+	zoneupdate_timer.Start();
 	while(RunLoops) {
 		{	//profiler block to omit the sleep from times
-		_ZP(net_main);
 
 		//Advance the timer to our current point in time
 		Timer::SetCurrentTime();
@@ -375,6 +383,13 @@ int main(int argc, char** argv) {
 			entity_list.AddClient(client);
 		}
 
+		if ( numclients < 1 && zoneupdate_timer.GetDuration() != IDLEZONEUPDATE )
+			zoneupdate_timer.SetTimer(IDLEZONEUPDATE);
+		else if ( numclients > 0 && zoneupdate_timer.GetDuration() == IDLEZONEUPDATE )
+		{
+			zoneupdate_timer.SetTimer(ZONEUPDATE);
+			zoneupdate_timer.Trigger();
+		}
 
 		//check for timeouts in other threads
 		timeout_manager.CheckTimeouts();
@@ -388,7 +403,7 @@ int main(int argc, char** argv) {
 			worldwasconnected = false;
 		}
 
-		if (ZoneLoaded && temp_timer.Check()) {
+		if (ZoneLoaded && zoneupdate_timer.Check()) {
 			{
 				if(net.group_timer.Enabled() && net.group_timer.Check())
 					entity_list.GroupProcess();
@@ -470,6 +485,8 @@ int main(int argc, char** argv) {
 
 	entity_list.Clear();
 
+	parse->ClearInterfaces();
+
 #ifdef EMBPERL
  	safe_delete(perl_parser);
 #endif
@@ -490,7 +507,7 @@ int main(int argc, char** argv) {
 	dbasync->StopThread();
 	safe_delete(taskmanager);
 	command_deinit();
-
+	safe_delete(parse);
 	CheckEQEMuErrorAndPause();
 	_log(ZONE__INIT, "Proper zone shutdown complete.");
 	return 0;

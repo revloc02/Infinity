@@ -619,7 +619,7 @@ XS(XS_Mob_GetSkill)
 		Mob *		THIS;
 		uint32		RETVAL;
 		dXSTARG;
-		SkillType		skill_num = (SkillType)SvUV(ST(1));
+		SkillUseTypes		skill_num = (SkillUseTypes)SvUV(ST(1));
 
 		if (sv_derived_from(ST(0), "Mob")) {
 			IV tmp = SvIV((SV*)SvRV(ST(0)));
@@ -901,7 +901,7 @@ XS(XS_Mob_Damage)
 		Mob*		from;
 		int32		damage = (int32)SvIV(ST(2));
 		uint16		spell_id = (uint16)SvUV(ST(3));
-		SkillType		attack_skill = (SkillType)SvUV(ST(4));
+		SkillUseTypes		attack_skill = (SkillUseTypes)SvUV(ST(4));
 		bool		avoidable;
 		int8		buffslot;
 		bool		iBuffTic;
@@ -5341,6 +5341,72 @@ XS(XS_Mob_SetHate)
 	XSRETURN_EMPTY;
 }
 
+XS(XS_Mob_HalveAggro);
+XS(XS_Mob_HalveAggro)
+{
+	dXSARGS;
+	if (items != 2)
+		Perl_croak(aTHX_ "Usage: Mob::HalveAggro(THIS, other)");
+	{
+		Mob *	THIS;
+		Mob *	other;
+
+		if (sv_derived_from(ST(0), "Mob")) {
+			IV tmp = SvIV((SV*)SvRV(ST(0)));
+			THIS = INT2PTR(Mob *,tmp);
+		}
+		else
+			Perl_croak(aTHX_ "THIS is not of type Mob");
+		if(THIS == nullptr)
+			Perl_croak(aTHX_ "THIS is nullptr, avoiding crash.");
+
+		if (sv_derived_from(ST(1), "Mob")) {
+			IV tmp = SvIV((SV*)SvRV(ST(1)));
+			other = INT2PTR(Mob *,tmp);
+		}
+		else
+			Perl_croak(aTHX_ "other is not of type Mob");
+		if(other == nullptr)
+			Perl_croak(aTHX_ "other is nullptr, avoiding crash.");
+
+		THIS->HalveAggro(other);
+	}
+	XSRETURN_EMPTY;
+}
+
+XS(XS_Mob_DoubleAggro);
+XS(XS_Mob_DoubleAggro)
+{
+	dXSARGS;
+	if (items != 2)
+		Perl_croak(aTHX_ "Usage: Mob::DoubleAggro(THIS, other)");
+	{
+		Mob *	THIS;
+		Mob *	other;
+
+		if (sv_derived_from(ST(0), "Mob")) {
+			IV tmp = SvIV((SV*)SvRV(ST(0)));
+			THIS = INT2PTR(Mob *,tmp);
+		}
+		else
+			Perl_croak(aTHX_ "THIS is not of type Mob");
+		if(THIS == nullptr)
+			Perl_croak(aTHX_ "THIS is nullptr, avoiding crash.");
+
+		if (sv_derived_from(ST(1), "Mob")) {
+			IV tmp = SvIV((SV*)SvRV(ST(1)));
+			other = INT2PTR(Mob *,tmp);
+		}
+		else
+			Perl_croak(aTHX_ "other is not of type Mob");
+		if(other == nullptr)
+			Perl_croak(aTHX_ "other is nullptr, avoiding crash.");
+
+		THIS->DoubleAggro(other);
+	}
+	XSRETURN_EMPTY;
+}
+
 XS(XS_Mob_GetHateAmount); /* prototype to pass -Wmissing-prototypes */
 XS(XS_Mob_GetHateAmount)
 {
@@ -6639,7 +6705,7 @@ XS(XS_Mob_DoSpecialAttackDamage)
 	{
 		Mob *		THIS;
 		Mob*		target;
-		SkillType	attack_skill = (SkillType)SvUV(ST(2));
+		SkillUseTypes	attack_skill = (SkillUseTypes)SvUV(ST(2));
 		int32		max_damage = (int32)SvIV(ST(3));
 		int32		min_damage = 1;
 		int32		hate_override = -11;
@@ -7644,7 +7710,7 @@ XS(XS_Mob_ModSkillDmgTaken)
 		Perl_croak(aTHX_ "Usage: Mob::ModSkillDmgTaken(THIS, skill, value)");
 	{
 		Mob *		THIS;
-		SkillType	skill_num = (SkillType)SvUV(ST(1));
+		SkillUseTypes	skill_num = (SkillUseTypes)SvUV(ST(1));
 		int16		value = (int16)SvIV(ST(2));
 
 		if (sv_derived_from(ST(0), "Mob")) {
@@ -7671,7 +7737,7 @@ XS(XS_Mob_GetModSkillDmgTaken)
 		Mob *		THIS;
 		uint32		RETVAL;
 		dXSTARG;
-		SkillType		skill_num = (SkillType)SvUV(ST(1));
+		SkillUseTypes		skill_num = (SkillUseTypes)SvUV(ST(1));
 
 		if (sv_derived_from(ST(0), "Mob")) {
 			IV tmp = SvIV((SV*)SvRV(ST(0)));
@@ -7698,7 +7764,7 @@ XS(XS_Mob_GetSkillDmgTaken)
 		Mob *		THIS;
 		int32		RETVAL;
 		dXSTARG;
-		SkillType		skill_num = (SkillType)SvUV(ST(1));
+		SkillUseTypes		skill_num = (SkillUseTypes)SvUV(ST(1));
 
 		if (sv_derived_from(ST(0), "Mob")) {
 			IV tmp = SvIV((SV*)SvRV(ST(0)));
@@ -7864,7 +7930,7 @@ XS(XS_Mob_DoMeleeSkillAttackDmg)
 		Mob *		THIS;
 		Mob*		target;
 		uint16		weapon_damage = (uint16)SvIV(ST(2));
-		SkillType	skill = (SkillType)SvUV(ST(3));
+		SkillUseTypes	skill = (SkillUseTypes)SvUV(ST(3));
 		int16		chance_mod = (int16)SvIV(ST(4));
 		int16		focus = (int16)SvIV(ST(5));
 		uint8		CanRiposte = (uint8)SvIV(ST(6));
@@ -8274,6 +8340,8 @@ XS(boot_Mob)
 		newXSproto(strcpy(buf, "IsRooted"), XS_Mob_IsRooted, file, "$");
 		newXSproto(strcpy(buf, "AddToHateList"), XS_Mob_AddToHateList, file, "$$;$$$$$");
 		newXSproto(strcpy(buf, "SetHate"), XS_Mob_SetHate, file, "$$;$$");
+		newXSproto(strcpy(buf, "HalveAggro"), XS_Mob_HalveAggro, file, "$$");
+		newXSproto(strcpy(buf, "DoubleAggro"), XS_Mob_DoubleAggro, file, "$$");
 		newXSproto(strcpy(buf, "GetHateAmount"), XS_Mob_GetHateAmount, file, "$$;$");
 		newXSproto(strcpy(buf, "GetDamageAmount"), XS_Mob_GetDamageAmount, file, "$$");
 		newXSproto(strcpy(buf, "GetHateTop"), XS_Mob_GetHateTop, file, "$");

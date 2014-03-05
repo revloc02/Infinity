@@ -320,6 +320,10 @@ void command_xtargets(Client *c, const Seperator *sep);
 void command_zopp(Client *c, const Seperator *sep);
 void command_augmentitem(Client *c, const Seperator *sep);
 void command_questerrors(Client *c, const Seperator *sep);
+void command_enablerecipe(Client *c, const Seperator *sep);
+void command_disablerecipe(Client *c, const Seperator *sep);
+void command_showspellslist(Client *c, const Seperator *sep);
+void command_npctype_cache(Client *c, const Seperator *sep);
 
 #ifdef EQPROFILE
 void command_profiledump(Client *c, const Seperator *sep);

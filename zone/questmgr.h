@@ -52,7 +52,7 @@ public:
 	void say(const char *str);
 	void say(const char *str, uint8 language);
 	void me(const char *str);
-	void summonitem(uint32 itemid, int16 charges = 0);
+	void summonitem(uint32 itemid, int16 charges = -1);
 	void write(const char *file, const char *str);
 	Mob* spawn2(int npc_type, int grid, int unused, float x, float y, float z, float heading);
 	Mob* unique_spawn(int npc_type, int grid, int unused, float x, float y, float z, float heading = 0);
@@ -211,6 +211,10 @@ public:
 	void AssignToInstance(uint16 instance_id);
 	void AssignGroupToInstance(uint16 instance_id);
 	void AssignRaidToInstance(uint16 instance_id);
+	void RemoveFromInstance(uint16 instance_id);
+	//void RemoveGroupFromInstance(uint16 instance_id);	//potentially useful but not implmented at this time.
+	//void RemoveRaidFromInstance(uint16 instance_id);	//potentially useful but not implmented at this time.
+	void RemoveAllFromInstance(uint16 instance_id);
 	void MovePCInstance(int zone_id, int instance_id, float x, float y, float z, float heading);
 	void FlagInstanceByGroupLeader(uint32 zone, int16 version);
 	void FlagInstanceByRaidLeader(uint32 zone, int16 version);
@@ -231,6 +235,9 @@ public:
 	void CrossZoneSignalPlayerByCharID(int charid, uint32 data);
 	void CrossZoneSignalPlayerByName(const char *CharName, uint32 data);
 	void CrossZoneMessagePlayerByName(uint32 Type, const char *CharName, const char *Message);
+	bool EnableRecipe(uint32 recipe_id);
+	bool DisableRecipe(uint32 recipe_id);
+	void ClearNPCTypeCache(int npctype_id);
 
 	Client *GetInitiator() const;
 	NPC *GetNPC() const;

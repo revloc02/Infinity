@@ -46,8 +46,8 @@ public:
 	virtual ~Merc();
 
 	//abstract virtual function implementations requird by base abstract class
-	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillType attack_skill);
-	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillType attack_skill, bool avoidable = true, int8 buffslot = -1, bool iBuffTic = false);
+	virtual bool Death(Mob* killerMob, int32 damage, uint16 spell_id, SkillUseTypes attack_skill);
+	virtual void Damage(Mob* from, int32 damage, uint16 spell_id, SkillUseTypes attack_skill, bool avoidable = true, int8 buffslot = -1, bool iBuffTic = false);
 	virtual bool Attack(Mob* other, int Hand = SLOT_PRIMARY, bool FromRiposte = false, bool IsStrikethrough = false, 
 		bool IsFromSpell = false, ExtraAttackOptions *opts = nullptr);
 	virtual bool HasRaid() { return false; }
@@ -77,10 +77,8 @@ public:
 	Corpse* GetGroupMemberCorpse();
 
 	// Merc Spell Casting Methods
-	int32 Additional_SpellDmg(uint16 spell_id, bool bufftick = false);
-	int32 Additional_Heal(uint16 spell_id);
-	virtual int32 GetActSpellDamage(uint16 spell_id, int32 value);
-	virtual int32 GetActSpellHealing(uint16 spell_id, int32 value);
+	virtual int32 GetActSpellDamage(uint16 spell_id, int32 value, Mob* target = nullptr);
+	virtual int32 GetActSpellHealing(uint16 spell_id, int32 value, Mob* target = nullptr);
 	virtual int32 GetActSpellCasttime(uint16 spell_id, int32 casttime);
 	virtual int32 GetActSpellCost(uint16 spell_id, int32 cost);
 	int8 GetChanceToCastBySpellType(int16 spellType);
@@ -166,10 +164,10 @@ public:
 	inline const uint8 GetClientVersion() const { return _OwnerClientVersion; }
 
 	virtual void SetTarget(Mob* mob);
-	bool	HasSkill(SkillType skill_id) const;
-	bool	CanHaveSkill(SkillType skill_id) const;
-	uint16	MaxSkill(SkillType skillid, uint16 class_, uint16 level) const;
-	inline	uint16	MaxSkill(SkillType skillid) const { return MaxSkill(skillid, GetClass(), GetLevel()); }
+	bool	HasSkill(SkillUseTypes skill_id) const;
+	bool	CanHaveSkill(SkillUseTypes skill_id) const;
+	uint16	MaxSkill(SkillUseTypes skillid, uint16 class_, uint16 level) const;
+	inline	uint16	MaxSkill(SkillUseTypes skillid) const { return MaxSkill(skillid, GetClass(), GetLevel()); }
 	virtual void DoClassAttacks(Mob *target);
 	void	CheckHateList();
 	bool	CheckTaunt();

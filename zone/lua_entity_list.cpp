@@ -65,6 +65,11 @@ Lua_Mob Lua_EntityList::GetMobByNpcTypeID(int npc_type) {
 	return Lua_Mob(self->GetMobByNpcTypeID(npc_type));
 }
 
+bool Lua_EntityList::IsMobSpawnedByNpcTypeID(int npc_type) {
+	Lua_Safe_Call_Bool();
+	return self->IsMobSpawnedByNpcTypeID(npc_type);
+}
+
 Lua_NPC Lua_EntityList::GetNPCByID(int id) {
 	Lua_Safe_Call_Class(Lua_NPC);
 	return Lua_NPC(self->GetNPCByID(id));
@@ -208,6 +213,11 @@ void Lua_EntityList::MessageClose(Lua_Mob sender, bool skip_sender, float dist, 
 void Lua_EntityList::RemoveFromTargets(Lua_Mob mob) {
 	Lua_Safe_Call_Void();
 	self->RemoveFromTargets(mob);
+}
+
+void Lua_EntityList::RemoveFromTargets(Lua_Mob mob, bool RemoveFromXTargets) {
+	Lua_Safe_Call_Void();
+	self->RemoveFromTargets(mob, RemoveFromXTargets);
 }
 
 void Lua_EntityList::ReplaceWithTarget(Lua_Mob target, Lua_Mob new_target) {
@@ -415,6 +425,7 @@ luabind::scope lua_register_entity_list() {
 		.def("GetMob", (Lua_Mob(Lua_EntityList::*)(const char*))&Lua_EntityList::GetMob)
 		.def("GetMob", (Lua_Mob(Lua_EntityList::*)(int))&Lua_EntityList::GetMob)
 		.def("GetMobByNpcTypeID", (Lua_Mob(Lua_EntityList::*)(int))&Lua_EntityList::GetMobByNpcTypeID)
+		.def("IsMobSpawnedByNpcTypeID", (bool(Lua_EntityList::*)(int))&Lua_EntityList::IsMobSpawnedByNpcTypeID)
 		.def("GetNPCByID", (Lua_NPC(Lua_EntityList::*)(int))&Lua_EntityList::GetNPCByID)
 		.def("GetNPCByNPCTypeID", (Lua_NPC(Lua_EntityList::*)(int))&Lua_EntityList::GetNPCByNPCTypeID)
 		.def("GetClientByName", (Lua_Client(Lua_EntityList::*)(const char*))&Lua_EntityList::GetClientByName)
@@ -444,6 +455,7 @@ luabind::scope lua_register_entity_list() {
 		.def("MessageStatus", (void(Lua_EntityList::*)(uint32,uint32,uint32,const char*))&Lua_EntityList::MessageStatus)
 		.def("MessageClose", (void(Lua_EntityList::*)(Lua_Mob,bool,float,uint32,const char*))&Lua_EntityList::MessageClose)
 		.def("RemoveFromTargets", (void(Lua_EntityList::*)(Lua_Mob))&Lua_EntityList::RemoveFromTargets)
+		.def("RemoveFromTargets", (void(Lua_EntityList::*)(Lua_Mob,bool))&Lua_EntityList::RemoveFromTargets)
 		.def("ReplaceWithTarget", (void(Lua_EntityList::*)(Lua_Mob,Lua_Mob))&Lua_EntityList::ReplaceWithTarget)
 		.def("OpenDoorsNear", (void(Lua_EntityList::*)(Lua_NPC))&Lua_EntityList::OpenDoorsNear)
 		.def("MakeNameUnique", (std::string(Lua_EntityList::*)(const char*))&Lua_EntityList::MakeNameUnique)

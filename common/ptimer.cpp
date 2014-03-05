@@ -74,11 +74,11 @@ To use ptimers, you need to create the table below in your DB:
 Schema:
 
 CREATE TABLE timers (
-	char_id INT(11) NOT nullptr,
-	type MEDIUMINT UNSIGNED NOT nullptr,
-	start INT UNSIGNED NOT nullptr,
-	duration INT UNSIGNED NOT nullptr,
-	enable TINYINT NOT nullptr,
+	char_id INT(11) NOT NULL,
+	type MEDIUMINT UNSIGNED NOT NULL,
+	start INT UNSIGNED NOT NULL,
+	duration INT UNSIGNED NOT NULL,
+	enable TINYINT NOT NULL,
 	PRIMARY KEY(char_id, type)
 );
 
@@ -294,7 +294,7 @@ PTimerList::~PTimerList() {
 	while(s != _list.end()) {
 		if(s->second != nullptr)
 			delete s->second;
-		s++;
+		++s;
 	}
 }
 
@@ -305,7 +305,7 @@ bool PTimerList::Load(Database *db) {
 	while(s != _list.end()) {
 		if(s->second != nullptr)
 			delete s->second;
-		s++;
+		++s;
 	}
 	_list.clear();
 
@@ -373,7 +373,7 @@ bool PTimerList::Store(Database *db) {
 			if(!s->second->Store(db))
 				res = false;
 		}
-		s++;
+		++s;
 	}
 	return(res);
 }
@@ -474,7 +474,7 @@ void PTimerList::ToVector(std::vector< std::pair<pTimerType, PersistentTimer *> 
 			p.second = s->second;
 			out.push_back(p);
 		}
-		s++;
+		++s;
 	}
 }
 

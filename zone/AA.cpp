@@ -262,7 +262,6 @@ void Client::ActivateAA(aaID activate){
 			}
 			SetMana(GetMana() - caa->mana_cost);
 		}
-		HandleAAAction(aaid);
 		if(caa->reuse_time > 0)
 		{
 			uint32 timer_base = CalcAAReuseTimer(caa);
@@ -273,6 +272,7 @@ void Client::ActivateAA(aaID activate){
 			p_timers.Start(AATimerID + pTimerAAStart, timer_base);
 			SendAATimer(AATimerID, 0, 0);
 		}
+		HandleAAAction(aaid);
 	}
 
 	//cast the spell, if we have one
@@ -432,7 +432,7 @@ void Client::HandleAAAction(aaID activate) {
 				int curhp = GetTarget()->GetHP();
 				target = aaTargetCurrent;
 				GetTarget()->HealDamage(curhp, this);
-				Death(this, 0, SPELL_UNKNOWN, HAND_TO_HAND);
+				Death(this, 0, SPELL_UNKNOWN, SkillHandtoHand);
 			}
 			break;
 
@@ -531,10 +531,14 @@ void Client::HandleAAAction(aaID activate) {
 	}
 
 	//cast the spell, if we have one
-	if(spell_id > 0 && spell_id < SPDAT_RECORDS) {
-		//I dont know when we need to mem and when we do not, if ever...
-		//MemorizeSpell(8, spell_id, 3);
-		CastSpell(spell_id, target_id);
+	if(IsValidSpell(spell_id)) {
+		int aatid = GetAATimerID(activate);
+		if(!CastSpell(spell_id, target_id , 10, -1, -1, 0, -1, pTimerAAStart + aatid , CalcAAReuseTimer(caa), 1)) {
+			SendAATimer(aatid, 0, 0xFFFFFF);
+			Message_StringID(15,ABILITY_FAILED);
+			p_timers.Clear(&database, pTimerAAStart + aatid);
+			return;
+		}
 	}
 
 	//handle the duration timer if we have one.
@@ -1099,7 +1103,7 @@ void Client::SendAATimers() {
 	PTimerList::iterator c,e;
 	c = p_timers.begin();
 	e = p_timers.end();
-	for(; c != e; c++) {
+	for(; c != e; ++c) {
 		PersistentTimer *cur = c->second;
 		if(cur->GetType() < pTimerAAStart || cur->GetType() > pTimerAAEnd)
 			continue;	//not an AA timer
@@ -1296,6 +1300,10 @@ void Client::SendAA(uint32 id, int seq) {
 		return;
 
 	int size=sizeof(SendAA_Struct)+sizeof(AA_Ability)*saa2->total_abilities;
+
+	if(size == 0)
+		return;
+
 	uchar* buffer = new uchar[size];
 	SendAA_Struct* saa=(SendAA_Struct*)buffer;
 	memcpy(saa,saa2,size);
@@ -1502,7 +1510,7 @@ void Client::ResetAA(){
 		aa[i]->value = 0;
 	}
 	std::map<uint32,uint8>::iterator itr;
-	for(itr=aa_points.begin();itr!=aa_points.end();itr++)
+	for(itr=aa_points.begin();itr!=aa_points.end();++itr)
 		aa_points[itr->first] = 0;
 
 		for(int i = 0; i < _maxLeaderAA; ++i)

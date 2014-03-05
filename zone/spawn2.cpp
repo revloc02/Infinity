@@ -34,33 +34,33 @@ extern WorldServer worldserver;
 /*
 
 CREATE TABLE spawn_conditions (
-	zone VARCHAR(16) NOT nullptr,
-	id MEDIUMINT UNSIGNED NOT nullptr DEFAULT '1',
-	value MEDIUMINT NOT nullptr DEFAULT '0',
-	onchange TINYINT UNSIGNED NOT nullptr DEFAULT '0',
-	name VARCHAR(255) NOT nullptr DEFAULT '',
+	zone VARCHAR(16) NOT NULL,
+	id MEDIUMINT UNSIGNED NOT NULL DEFAULT '1',
+	value MEDIUMINT NOT NULL DEFAULT '0',
+	onchange TINYINT UNSIGNED NOT NULL DEFAULT '0',
+	name VARCHAR(255) NOT NULL DEFAULT '',
 	PRIMARY KEY(zone,id)
 );
 
 CREATE TABLE spawn_events (
 	#identifiers
 	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-	zone VARCHAR(16) NOT nullptr,
-	cond_id MEDIUMINT UNSIGNED NOT nullptr,
-	name VARCHAR(255) NOT nullptr DEFAULT '',
+	zone VARCHAR(16) NOT NULL,
+	cond_id MEDIUMINT UNSIGNED NOT NULL,
+	name VARCHAR(255) NOT NULL DEFAULT '',
 
 	#timing information
-	period INT UNSIGNED NOT nullptr,
-	next_minute TINYINT UNSIGNED NOT nullptr,
-	next_hour TINYINT UNSIGNED NOT nullptr,
-	next_day TINYINT UNSIGNED NOT nullptr,
-	next_month TINYINT UNSIGNED NOT nullptr,
-	next_year INT UNSIGNED NOT nullptr,
-	enabled TINYINT NOT nullptr DEFAULT '1',
+	period INT UNSIGNED NOT NULL,
+	next_minute TINYINT UNSIGNED NOT NULL,
+	next_hour TINYINT UNSIGNED NOT NULL,
+	next_day TINYINT UNSIGNED NOT NULL,
+	next_month TINYINT UNSIGNED NOT NULL,
+	next_year INT UNSIGNED NOT NULL,
+	enabled TINYINT NOT NULL DEFAULT '1',
 
 	#action:
-	action TINYINT UNSIGNED NOT nullptr DEFAULT '0',
-	argument MEDIUMINT NOT nullptr DEFAULT '0'
+	action TINYINT UNSIGNED NOT NULL DEFAULT '0',
+	argument MEDIUMINT NOT NULL DEFAULT '0'
 );
 
 */
@@ -138,8 +138,6 @@ uint32 Spawn2::despawnTimer(uint32 despawn_timer)
 }
 
 bool Spawn2::Process() {
-	_ZP(Spawn2_Process);
-
 	IsDespawned = false;
 
 	if(!Enabled())
@@ -231,8 +229,8 @@ bool Spawn2::Process() {
 		entity_list.AddNPC(npc);
 		//this limit add must be done after the AddNPC since we need the entity ID.
 		entity_list.LimitAddNPC(npc);
-			if(sg->roamdist && sg->roambox[0] && sg->roambox[1] && sg->roambox[2] && sg->roambox[3] && sg->delay)
-		npc->AI_SetRoambox(sg->roamdist,sg->roambox[0],sg->roambox[1],sg->roambox[2],sg->roambox[3],sg->delay);
+			if(sg->roamdist && sg->roambox[0] && sg->roambox[1] && sg->roambox[2] && sg->roambox[3] && sg->delay && sg->min_delay)
+		npc->AI_SetRoambox(sg->roamdist,sg->roambox[0],sg->roambox[1],sg->roambox[2],sg->roambox[3],sg->delay,sg->min_delay);
 		if(zone->InstantGrids()) {
 			_log(SPAWNS__MAIN, "Spawn2 %d: Group %d spawned %s (%d) at (%.3f, %.3f, %.3f).", spawn2_id, spawngroup_id_, npc->GetName(), npcid, x, y, z);
 			LoadGrid();
@@ -484,30 +482,47 @@ void Spawn2::SpawnConditionChanged(const SpawnCondition &c, int16 old_value) {
 		return;	//no change
 	}
 
+	uint32 timer_remaining = 0;
 	switch(c.on_change) {
 	case SpawnCondition::DoNothing:
 		//that was easy.
-		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Taking no action on existing spawn.", spawn2_id, new_state?"enabed":"disabled");
+		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Taking no action on existing spawn.", spawn2_id, new_state?"enabled":"disabled");
 		break;
 	case SpawnCondition::DoDepop:
-		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Depoping our mob.", spawn2_id, new_state?"enabed":"disabled");
+		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Depoping our mob.", spawn2_id, new_state?"enabled":"disabled");
 		if(npcthis != nullptr)
 			npcthis->Depop(false);	//remove the current mob
 		Reset();	//reset our spawn timer
 		break;
 	case SpawnCondition::DoRepop:
-		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Preforming a repop.", spawn2_id, new_state?"enabed":"disabled");
+		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Forcing a repop.", spawn2_id, new_state?"enabled":"disabled");
 		if(npcthis != nullptr)
 			npcthis->Depop(false);	//remove the current mob
 		Repop();	//repop
 		break;
+	case SpawnCondition::DoRepopIfReady:
+		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Forcing a repop if repsawn timer is expired.", spawn2_id, new_state?"enabled":"disabled");
+		if(npcthis != nullptr) {
+			_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our npcthis is currently not null. The zone thinks it is %s. Forcing a depop.", spawn2_id, npcthis->GetName());
+			npcthis->Depop(false);	//remove the current mob
+			npcthis = nullptr;
+		}
+		if(new_state) { // only get repawn timer remaining when the SpawnCondition is enabled.
+			timer_remaining = database.GetSpawnTimeLeft(spawn2_id,zone->GetInstanceID());
+			_log(SPAWNS__CONDITIONS,"Spawn2 %d: Our condition is now %s. The respawn timer_remaining is %d. Forcing a repop if it is <= 0.", spawn2_id, new_state?"enabled":"disabled", timer_remaining);
+			if(timer_remaining <= 0)
+				Repop();
+		} else {
+			_log(SPAWNS__CONDITIONS,"Spawn2 %d: Our condition is now %s. Not checking respawn timer.", spawn2_id, new_state?"enabled":"disabled");
+		}
+		break;
 	default:
 		if(c.on_change < SpawnCondition::DoSignalMin) {
-			_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Invalid on-change action %d.", spawn2_id, new_state?"enabed":"disabled", c.on_change);
+			_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Invalid on-change action %d.", spawn2_id, new_state?"enabled":"disabled", c.on_change);
 			return;	//unknown onchange action
 		}
 		int signal_id = c.on_change - SpawnCondition::DoSignalMin;
-		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Signaling our mob with %d.", spawn2_id, new_state?"enabed":"disabled", signal_id);
+		_log(SPAWNS__CONDITIONS, "Spawn2 %d: Our condition is now %s. Signaling our mob with %d.", spawn2_id, new_state?"enabled":"disabled", signal_id);
 		if(npcthis != nullptr)
 			npcthis->SignalNPC(signal_id);
 	}
@@ -568,7 +583,7 @@ void SpawnConditionManager::Process() {
 		std::vector<SpawnEvent>::iterator cur,end;
 		cur = spawn_events.begin();
 		end = spawn_events.end();
-		for(; cur != end; cur++) {
+		for(; cur != end; ++cur) {
 			SpawnEvent &cevent = *cur;
 
 			if(!cevent.enabled)
@@ -829,7 +844,7 @@ bool SpawnConditionManager::LoadSpawnConditions(const char* zone_name, uint32 in
 	cur = spawn_events.begin();
 	end = spawn_events.end();
 	bool ran;
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		SpawnEvent &cevent = *cur;
 
 		if(!cevent.enabled)
@@ -877,7 +892,7 @@ void SpawnConditionManager::FindNearestEvent() {
 	cur = spawn_events.begin();
 	end = spawn_events.end();
 	int next_id = -1;
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		SpawnEvent &cevent = *cur;
 
 		if(!cevent.enabled)
@@ -985,7 +1000,7 @@ void SpawnConditionManager::ReloadEvent(uint32 event_id) {
 	std::vector<SpawnEvent>::iterator cur,end;
 	cur = spawn_events.begin();
 	end = spawn_events.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		SpawnEvent &cevent = *cur;
 
 		if(cevent.id == event_id) {
@@ -1028,7 +1043,7 @@ void SpawnConditionManager::ToggleEvent(uint32 event_id, bool enabled, bool rese
 	std::vector<SpawnEvent>::iterator cur,end;
 	cur = spawn_events.begin();
 	end = spawn_events.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		SpawnEvent &cevent = *cur;
 
 		if(cevent.id == event_id) {

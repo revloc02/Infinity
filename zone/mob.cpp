@@ -72,7 +72,7 @@ Mob::Mob(const char* in_name,
 		uint32		in_drakkin_heritage,
 		uint32		in_drakkin_tattoo,
 		uint32		in_drakkin_details,
-		uint32		in_armor_tint[MAX_MATERIALS],
+		uint32		in_armor_tint[_MaterialCount],
 
 		uint8		in_aa_title,
 		uint8		in_see_invis, // see through invis/ivu
@@ -124,7 +124,6 @@ Mob::Mob(const char* in_name,
 	move_tic_count = 0;
 
 	_egnode = nullptr;
-	adverrorinfo = 0;
 	name[0]=0;
 	orig_name[0]=0;
 	clean_name[0]=0;
@@ -178,6 +177,8 @@ Mob::Mob(const char* in_name,
 	slow_mitigation= 0;
 	findable	= false;
 	trackable	= true;
+	has_shieldequiped = false;
+	has_numhits = false;
 
 	if(in_aa_title>0)
 		aa_title	= in_aa_title;
@@ -239,7 +240,7 @@ Mob::Mob(const char* in_name,
 		SkillProcs[j].base_spellID = SPELL_UNKNOWN;
 	}
 
-	for (i = 0; i < MAX_MATERIALS; i++)
+	for (i = 0; i < _MaterialCount; i++)
 	{
 		if (in_armor_tint)
 		{
@@ -384,16 +385,6 @@ Mob::Mob(const char* in_name,
 
 Mob::~Mob()
 {
-	// Our Entity ID is set to 0 in NPC::Death. This leads to mobs hanging around for a while in
-	// the entity list, even after they have been destroyed. Use our memory pointer to remove the mob
-	// if our EntityID is 0.
-	//
-	if(GetID() > 0)
-		entity_list.RemoveMob(GetID());
-
-	else
-		entity_list.RemoveMob(this);
-
 	AI_Stop();
 	if (GetPet()) {
 		if (GetPet()->Charmed())
@@ -401,8 +392,6 @@ Mob::~Mob()
 		else
 			SetPet(0);
 	}
-	
-	ClearSpecialAbilities();
 
 	EQApplicationPacket app;
 	CreateDespawnPacket(&app, !IsCorpse());
@@ -518,76 +507,75 @@ bool Mob::IsInvisible(Mob* other) const
 	return(false);
 }
 
-float Mob::_GetMovementSpeed(int mod) const {
+float Mob::_GetMovementSpeed(int mod) const
+{
 	// List of movement speed modifiers, including AAs & spells:
 	// http://everquest.allakhazam.com/db/item.html?item=1721;page=1;howmany=50#m10822246245352
 	if (IsRooted())
 		return 0.0f;
 
-	float aa_mod = 0.0f;
 	float speed_mod = runspeed;
-	bool has_horse = false;
-	if (IsClient())
-	{
-		if(CastToClient()->GetGMSpeed())
-		{
+
+	// These two cases ignore the cap, be wise in the DB for horses.
+	if (IsClient()) {
+		if (CastToClient()->GetGMSpeed()) {
 			speed_mod = 3.125f;
-		}
-		else
-		{
-			Mob* horse = entity_list.GetMob(CastToClient()->GetHorseId());
-			if(horse)
-			{
+			if (mod != 0)
+				speed_mod += speed_mod * static_cast<float>(mod) / 100.0f;
+			return speed_mod;
+		} else {
+			Mob *horse = entity_list.GetMob(CastToClient()->GetHorseId());
+			if (horse) {
 				speed_mod = horse->GetBaseRunspeed();
-				has_horse = true;
+				if (mod != 0)
+					speed_mod += speed_mod * static_cast<float>(mod) / 100.0f;
+				return speed_mod;
 			}
 		}
 	}
 
-	aa_mod += itembonuses.BaseMovementSpeed + spellbonuses.BaseMovementSpeed + aabonuses.BaseMovementSpeed;
-
-	int spell_mod = spellbonuses.movementspeed + itembonuses.movementspeed;
+	int aa_mod = 0;
+	int spell_mod = 0;
+	int runspeedcap = RuleI(Character,BaseRunSpeedCap);
 	int movemod = 0;
+	float frunspeedcap = 0.0f;
 
-	if(spell_mod < 0)
-	{
+	runspeedcap += itembonuses.IncreaseRunSpeedCap + spellbonuses.IncreaseRunSpeedCap + aabonuses.IncreaseRunSpeedCap;
+	aa_mod += itembonuses.BaseMovementSpeed + spellbonuses.BaseMovementSpeed + aabonuses.BaseMovementSpeed;
+	spell_mod += spellbonuses.movementspeed + itembonuses.movementspeed;
+
+	// hard cap
+	if (runspeedcap > 225)
+		runspeedcap = 225;
+
+	if (spell_mod < 0)
 		movemod += spell_mod;
-	}
-	else if(spell_mod > (aa_mod))
-	{
+	else if (spell_mod > aa_mod)
 		movemod = spell_mod;
-	}
 	else
-	{
-		movemod = static_cast<int>(aa_mod);
-	}
+		movemod = aa_mod;
 
-	if(movemod < -85) //cap it at moving very very slow
+	// cap negative movemods from snares mostly
+	if (movemod < -85)
 		movemod = -85;
 
-	if (!has_horse && movemod != 0)
-		speed_mod += (speed_mod * float(movemod) / 100.0f);
+	if (movemod != 0)
+		speed_mod += speed_mod * static_cast<float>(movemod) / 100.0f;
 
-	if(mod != 0)
-		speed_mod += (speed_mod * (float)mod / 100.0f);
+	// runspeed caps
+	frunspeedcap = static_cast<float>(runspeedcap) / 100.0f;
+	if (IsClient() && speed_mod > frunspeedcap)
+		speed_mod = frunspeedcap;
 
-	if(speed_mod <= 0.0f)
-		return(0.0001f);
+	// apply final mod such as the -47 for walking
+	// use runspeed since it should stack with snares
+	// and if we get here, we know runspeed was the initial
+	// value before we applied movemod.
+	if (mod != 0)
+		speed_mod += runspeed * static_cast<float>(mod) / 100.0f;
 
-	//runspeed cap.
-	if(IsClient())
-	{
-		if (speed_mod > 1.58){
-			uint8 bonus_IncreaseRunSpeedCap = itembonuses.IncreaseRunSpeedCap + spellbonuses.IncreaseRunSpeedCap + aabonuses.IncreaseRunSpeedCap;
-			if (bonus_IncreaseRunSpeedCap){
-				speed_mod += float(bonus_IncreaseRunSpeedCap)/100.0f;
-					if(speed_mod > 1.74)
-						speed_mod = 1.74;
-			}
-			else
-				speed_mod = 1.58;
-		}
-	}
+	if (speed_mod <= 0.0f)
+		speed_mod = IsClient() ? 0.0001f : 0.0f;
 
 	return speed_mod;
 }
@@ -946,7 +934,7 @@ void Mob::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho)
 
 	strn0cpy(ns->spawn.lastName, lastname, sizeof(ns->spawn.lastName));
 
-	for(i = 0; i < MAX_MATERIALS; i++)
+	for(i = 0; i < _MaterialCount; i++)
 	{
 		ns->spawn.equipment[i] = GetEquipmentMaterial(i);
 		if (armor_tint[i])
@@ -1547,7 +1535,7 @@ void Mob::SendIllusionPacket(uint16 in_race, uint8 in_gender, uint8 in_texture, 
 }
 
 uint8 Mob::GetDefaultGender(uint16 in_race, uint8 in_gender) {
-//cout << "Gender in: " << (int)in_gender << endl;
+//std::cout << "Gender in: " << (int)in_gender << std::endl; // undefined cout [CODEBUG]
 	if ((in_race > 0 && in_race <= GNOME )
 		|| in_race == IKSAR || in_race == VAHSHIR || in_race == FROGLOK || in_race == DRAKKIN
 		|| in_race == 15 || in_race == 50 || in_race == 57 || in_race == 70 || in_race == 98 || in_race == 118) {
@@ -1607,6 +1595,21 @@ void Mob::SendLevelAppearance(){
 	la->value4a = 1;
 	la->value4b = 1;
 	la->value5a = 2;
+	entity_list.QueueCloseClients(this,outapp);
+	safe_delete(outapp);
+}
+
+void Mob::SendStunAppearance()
+{
+	EQApplicationPacket* outapp = new EQApplicationPacket(OP_LevelAppearance, sizeof(LevelAppearance_Struct));
+	LevelAppearance_Struct* la = (LevelAppearance_Struct*)outapp->pBuffer;
+	la->parm1 = 58;
+	la->parm2 = 60;
+	la->spawn_id = GetID();
+	la->value1a = 2;
+	la->value1b = 0;
+	la->value2a = 2;
+	la->value2b = 0;
 	entity_list.QueueCloseClients(this,outapp);
 	safe_delete(outapp);
 }
@@ -1877,35 +1880,43 @@ void Mob::SetOwnerID(uint16 NewOwnerID) {
 		this->Depop();
 }
 
-//heko: for backstab
-bool Mob::BehindMob(Mob* other, float playerx, float playery) const {
-	if (!other)
-		return true; // sure your behind your invisible friend?? (fall thru for sneak)
-	//see if player is behind mob
-	float angle, lengthb, vectorx, vectory;
-	float mobx = -(other->GetX());	// mob xlocation (inverse because eq is confused)
-	float moby = other->GetY();		// mobylocation
+// used in checking for behind (backstab) and checking in front (melee LoS)
+float Mob::MobAngle(Mob *other, float ourx, float oury) const {
+	if (!other || other == this)
+		return 0.0f;
+
+	float angle, lengthb, vectorx, vectory, dotp;
+	float mobx = -(other->GetX());	// mob xloc (inverse because eq)
+	float moby = other->GetY();		// mob yloc
 	float heading = other->GetHeading();	// mob heading
 	heading = (heading * 360.0f) / 256.0f;	// convert to degrees
 	if (heading < 270)
 		heading += 90;
 	else
 		heading -= 270;
+
 	heading = heading * 3.1415f / 180.0f;	// convert to radians
 	vectorx = mobx + (10.0f * cosf(heading));	// create a vector based on heading
 	vectory = moby + (10.0f * sinf(heading));	// of mob length 10
 
-	//length of mob to player vector
-	//lengthb = (float)sqrtf(pow((-playerx-mobx),2) + pow((playery-moby),2));
-	lengthb = (float) sqrtf( ( (-playerx-mobx) * (-playerx-mobx) ) + ( (playery-moby) * (playery-moby) ) );
+	// length of mob to player vector
+	lengthb = (float) sqrtf(((-ourx - mobx) * (-ourx - mobx)) + ((oury - moby) * (oury - moby)));
 
 	// calculate dot product to get angle
-	angle = acosf(((vectorx-mobx)*(-playerx-mobx)+(vectory-moby)*(playery-moby)) / (10 * lengthb));
+	// Handle acos domain errors due to floating point rounding errors
+	dotp = ((vectorx - mobx) * (-ourx - mobx) +
+			(vectory - moby) * (oury - moby)) / (10 * lengthb);
+	// I haven't seen any errors that  cause problems that weren't slightly
+	// larger/smaller than 1/-1, so only handle these cases for now
+	if (dotp > 1)
+		return 0.0f;
+	else if (dotp < -1)
+		return 180.0f;
+
+	angle = acosf(dotp);
 	angle = angle * 180.0f / 3.1415f;
-	if (angle > 90.0f) //not sure what value to use (90*2=180 degrees is front)
-		return true;
-	else
-		return false;
+
+	return angle;
 }
 
 void Mob::SetZone(uint32 zone_id, uint32 instance_id)
@@ -1919,7 +1930,7 @@ void Mob::SetZone(uint32 zone_id, uint32 instance_id)
 }
 
 void Mob::Kill() {
-	Death(this, 0, SPELL_UNKNOWN, HAND_TO_HAND);
+	Death(this, 0, SPELL_UNKNOWN, SkillHandtoHand);
 }
 
 void Mob::SetAttackTimer() {
@@ -1970,9 +1981,9 @@ void Mob::SetAttackTimer() {
 			//if we have a 2H weapon in our main hand, no dual
 			if(PrimaryWeapon != nullptr) {
 				if(	PrimaryWeapon->ItemClass == ItemClassCommon
-					&& (PrimaryWeapon->ItemType == ItemType2HS
-					||	PrimaryWeapon->ItemType == ItemType2HB
-					||	PrimaryWeapon->ItemType == ItemType2HPierce)) {
+					&& (PrimaryWeapon->ItemType == ItemType2HSlash
+					||	PrimaryWeapon->ItemType == ItemType2HBlunt
+					||	PrimaryWeapon->ItemType == ItemType2HPiercing)) {
 					attack_dw_timer.Disable();
 					continue;
 				}
@@ -2004,7 +2015,7 @@ void Mob::SetAttackTimer() {
 				ItemToUse = nullptr;
 			}
 			// Check to see if skill is valid
-			else if((ItemToUse->ItemType > ItemTypeThrowing) && (ItemToUse->ItemType != ItemTypeHand2Hand) && (ItemToUse->ItemType != ItemType2HPierce)) {
+			else if((ItemToUse->ItemType > ItemTypeLargeThrowing) && (ItemToUse->ItemType != ItemTypeMartial) && (ItemToUse->ItemType != ItemType2HPiercing)) {
 				//no weapon
 				ItemToUse = nullptr;
 			}
@@ -2040,7 +2051,7 @@ void Mob::SetAttackTimer() {
 			if(speed < RuleI(Combat, MinHastedDelay))
 				speed = RuleI(Combat, MinHastedDelay);
 
-			if(ItemToUse && (ItemToUse->ItemType == ItemTypeBow || ItemToUse->ItemType == ItemTypeThrowing))
+			if(ItemToUse && (ItemToUse->ItemType == ItemTypeBow || ItemToUse->ItemType == ItemTypeLargeThrowing))
 			{
 				if(IsClient())
 				{
@@ -2050,7 +2061,7 @@ void Mob::SetAttackTimer() {
 						const ItemInst *pi = CastToClient()->GetInv().GetItem(r);
 						if(!pi)
 							continue;
-						if(pi->IsType(ItemClassContainer) && pi->GetItem()->BagType == bagTypeQuiver)
+						if(pi->IsType(ItemClassContainer) && pi->GetItem()->BagType == BagTypeQuiver)
 						{
 							float temp_wr = ( pi->GetItem()->BagWR / RuleI(Combat, QuiverWRHasteDiv) );
 							if(temp_wr > max_quiver)
@@ -2078,13 +2089,13 @@ void Mob::SetAttackTimer() {
 bool Mob::CanThisClassDualWield(void) const
 {
 	if (!IsClient()) {
-		return(GetSkill(DUAL_WIELD) > 0);
+		return(GetSkill(SkillDualWield) > 0);
 	} else {
 		const ItemInst* inst = CastToClient()->GetInv().GetItem(SLOT_PRIMARY);
 		// 2HS, 2HB, or 2HP
 		if (inst && inst->IsType(ItemClassCommon)) {
 			const Item_Struct* item = inst->GetItem();
-			if ((item->ItemType == ItemType2HB) || (item->ItemType == ItemType2HS) || (item->ItemType == ItemType2HPierce))
+			if ((item->ItemType == ItemType2HBlunt) || (item->ItemType == ItemType2HSlash) || (item->ItemType == ItemType2HPiercing))
 				return false;
 		} else {
 			//No weapon in hand... using hand-to-hand...
@@ -2094,19 +2105,19 @@ bool Mob::CanThisClassDualWield(void) const
 			}
 		}
 
-		return (CastToClient()->HasSkill(DUAL_WIELD));	// No skill = no chance
+		return (CastToClient()->HasSkill(SkillDualWield));	// No skill = no chance
 	}
 }
 
 bool Mob::CanThisClassDoubleAttack(void) const
 {
 	if(!IsClient()) {
-		return(GetSkill(DOUBLE_ATTACK) > 0);
+		return(GetSkill(SkillDoubleAttack) > 0);
 	} else {
 		if(aabonuses.GiveDoubleAttack || itembonuses.GiveDoubleAttack || spellbonuses.GiveDoubleAttack) {
 			return true;
 		}
-		return(CastToClient()->HasSkill(DOUBLE_ATTACK));
+		return(CastToClient()->HasSkill(SkillDoubleAttack));
 	}
 }
 
@@ -2146,41 +2157,40 @@ bool Mob::IsWarriorClass(void) const
 bool Mob::CanThisClassParry(void) const
 {
 	if(!IsClient()) {
-		return(GetSkill(PARRY) > 0);
+		return(GetSkill(SkillParry) > 0);
 	} else {
-		return(CastToClient()->HasSkill(PARRY));
+		return(CastToClient()->HasSkill(SkillParry));
 	}
 }
 
 bool Mob::CanThisClassDodge(void) const
 {
 	if(!IsClient()) {
-		return(GetSkill(DODGE) > 0);
+		return(GetSkill(SkillDodge) > 0);
 	} else {
-		return(CastToClient()->HasSkill(DODGE));
+		return(CastToClient()->HasSkill(SkillDodge));
 	}
 }
 
 bool Mob::CanThisClassRiposte(void) const
 {
 	if(!IsClient()) {
-		return(GetSkill(RIPOSTE) > 0);
+		return(GetSkill(SkillRiposte) > 0);
 	} else {
-		return(CastToClient()->HasSkill(RIPOSTE));
+		return(CastToClient()->HasSkill(SkillRiposte));
 	}
 }
 
 bool Mob::CanThisClassBlock(void) const
 {
 	if(!IsClient()) {
-		return(GetSkill(BLOCKSKILL) > 0);
+		return(GetSkill(SkillBlock) > 0);
 	} else {
-		return(CastToClient()->HasSkill(BLOCKSKILL));
+		return(CastToClient()->HasSkill(SkillBlock));
 	}
 }
 
 float Mob::Dist(const Mob &other) const {
-	_ZP(Mob_Dist);
 	float xDiff = other.x_pos - x_pos;
 	float yDiff = other.y_pos - y_pos;
 	float zDiff = other.z_pos - z_pos;
@@ -2191,7 +2201,6 @@ float Mob::Dist(const Mob &other) const {
 }
 
 float Mob::DistNoZ(const Mob &other) const {
-	_ZP(Mob_DistNoZ);
 	float xDiff = other.x_pos - x_pos;
 	float yDiff = other.y_pos - y_pos;
 
@@ -2200,7 +2209,6 @@ float Mob::DistNoZ(const Mob &other) const {
 }
 
 float Mob::DistNoRoot(const Mob &other) const {
-	_ZP(Mob_DistNoRoot);
 	float xDiff = other.x_pos - x_pos;
 	float yDiff = other.y_pos - y_pos;
 	float zDiff = other.z_pos - z_pos;
@@ -2211,7 +2219,6 @@ float Mob::DistNoRoot(const Mob &other) const {
 }
 
 float Mob::DistNoRoot(float x, float y, float z) const {
-	_ZP(Mob_DistNoRoot);
 	float xDiff = x - x_pos;
 	float yDiff = y - y_pos;
 	float zDiff = z - z_pos;
@@ -2222,7 +2229,6 @@ float Mob::DistNoRoot(float x, float y, float z) const {
 }
 
 float Mob::DistNoRootNoZ(float x, float y) const {
-	_ZP(Mob_DistNoRoot);
 	float xDiff = x - x_pos;
 	float yDiff = y - y_pos;
 
@@ -2230,7 +2236,6 @@ float Mob::DistNoRootNoZ(float x, float y) const {
 }
 
 float Mob::DistNoRootNoZ(const Mob &other) const {
-	_ZP(Mob_DistNoRootNoZ);
 	float xDiff = other.x_pos - x_pos;
 	float yDiff = other.y_pos - y_pos;
 
@@ -2563,8 +2568,8 @@ int32 Mob::GetEquipmentMaterial(uint8 material_slot) const
 	{
 		if	// for primary and secondary we need the model, not the material
 		(
-			material_slot == MATERIAL_PRIMARY ||
-			material_slot == MATERIAL_SECONDARY
+			material_slot == MaterialPrimary ||
+			material_slot == MaterialSecondary
 		)
 		{
 			if(strlen(item->IDFile) > 2)
@@ -2731,21 +2736,9 @@ void Mob::Warp( float x, float y, float z )
 
 bool Mob::DivineAura() const
 {
-	uint32 l;
-	uint32 buff_count = GetMaxTotalSlots();
-	for (l = 0; l < buff_count; l++)
-	{
-		if (buffs[l].spellid != SPELL_UNKNOWN)
-		{
-			for (int k = 0; k < EFFECT_COUNT; k++)
-			{
-				if (spells[buffs[l].spellid].effectid[k] == SE_DivineAura)
-				{
-					return true;
-				}
-			}
-		}
-	}
+	if (spellbonuses.DivineAura)
+		return true;
+
 	return false;
 }
 
@@ -2782,7 +2775,7 @@ int16 Mob::GetResist(uint8 type) const
 
 uint32 Mob::GetLevelHP(uint8 tlevel)
 {
-	//cout<<"Tlevel: "<<(int)tlevel<<endl;
+	//std::cout<<"Tlevel: "<<(int)tlevel<<std::endl; // cout undefined [CODEBUG]
 	int multiplier = 0;
 	if (tlevel < 10)
 	{
@@ -2883,33 +2876,42 @@ uint32 Mob::GetZoneID() const {
 }
 
 int Mob::GetHaste() {
-	int h = spellbonuses.haste + spellbonuses.hastetype2 + itembonuses.haste;
+	int h = spellbonuses.haste + spellbonuses.hastetype2;
 	int cap = 0;
+	int overhaste = 0;
 	int level = GetLevel();
 
-	if(level < 30) { // Rogean: Are these caps correct? Will use for now.
-		cap = 50;
-	} else if(level < 50) {
-		cap = 74;
-	} else if(level < 55) {
-		cap = 84;
-	} else if(level < 60) {
-		cap = 94;
-	} else {
+	// 26+ no cap, 1-25 10
+	if (level > 25) // 26+
+		h += itembonuses.haste;
+	else // 1-25
+		h += itembonuses.haste > 10 ? 10 : itembonuses.haste;
+
+	// 60+ 100, 51-59 85, 1-50 level+25
+	if (level > 59) // 60+
 		cap = RuleI(Character, HasteCap);
-	}
+	else if (level > 50) // 51-59
+		cap = 85;
+	else // 1-50
+		cap = level + 25;
 
-	if(h > cap) h = cap;
+	if(h > cap)
+		h = cap;
 
-	h += spellbonuses.hastetype3;
+	// 51+ 25 (despite there being higher spells...), 1-50 10
+	if (level > 50) // 51+
+		overhaste = spellbonuses.hastetype3 > 25 ? 25 : spellbonuses.hastetype3;
+	else // 1-50
+		overhaste = spellbonuses.hastetype3 > 10 ? 10 : spellbonuses.hastetype3;
+
+	h += overhaste;
 	h += ExtraHaste;	//GM granted haste.
 
-	if (spellbonuses.inhibitmelee){
+	if (spellbonuses.inhibitmelee) {
 		if (h >= 0)
 			h -= spellbonuses.inhibitmelee;
-
 		else
-			h -=((100+h)*spellbonuses.inhibitmelee/100);
+			h -= ((100 + h) * spellbonuses.inhibitmelee / 100);
 	}
 
 	return(h);
@@ -3040,15 +3042,6 @@ void Mob::SetDeltas(float dx, float dy, float dz, float dh) {
 	delta_heading = static_cast<int>(dh);
 }
 
-
-bool Mob::HasBuffIcon(Mob *caster, Mob *target, uint16 spell_id)
-{
-	if((caster->CalcBuffDuration(caster, target, spell_id)-1) > 0)
-		return true;
-	else
-		return false;
-}
-
 void Mob::SetEntityVariable(const char *id, const char *m_var)
 {
 	std::string n_m_var = m_var;
@@ -3147,15 +3140,15 @@ void Mob::TriggerOnCast(uint32 focus_spell, uint32 spell_id, bool aa_trigger)
 		trigger_spell_id = CastToClient()->CalcAAFocus(focusTriggerOnCast, focus_spell, spell_id);
 
 		if(IsValidSpell(trigger_spell_id) && GetTarget())
-			SpellFinished(trigger_spell_id, GetTarget());
+			SpellFinished(trigger_spell_id, GetTarget(), 10, 0, -1, spells[trigger_spell_id].ResistDiff);
 	}
 
 	else{
 		trigger_spell_id = CalcFocusEffect(focusTriggerOnCast, focus_spell, spell_id);
 
 		if(IsValidSpell(trigger_spell_id) && GetTarget()){
-			SpellFinished(trigger_spell_id, GetTarget());
-			CheckHitsRemaining(0, false,false, 0, focus_spell);
+			SpellFinished(trigger_spell_id, GetTarget(),10, 0, -1, spells[trigger_spell_id].ResistDiff);
+			CheckNumHitsRemaining(7,0, focus_spell);
 		}
 	}
 }
@@ -3184,7 +3177,7 @@ void Mob::TrySpellTrigger(Mob *target, uint32 spell_id)
 				if(MakeRandomInt(0, trig_chance) <= spells[spell_id].base[i])
 				{
 					// If we trigger an effect then its over.
-					SpellFinished(spells[spell_id].base2[i], target);
+					SpellFinished(spells[spell_id].base2[i], target, 10, 0, -1, spells[spell_id].ResistDiff);
 					break;
 				}
 				else
@@ -3205,7 +3198,7 @@ void Mob::TrySpellTrigger(Mob *target, uint32 spell_id)
 			{
 				if(MakeRandomInt(0, 100) <= spells[spell_id].base[i])
 				{
-					SpellFinished(spells[spell_id].base2[i], target);
+					SpellFinished(spells[spell_id].base2[i], target, 10, 0, -1, spells[spell_id].ResistDiff);
 				}
 			}
 		}
@@ -3226,11 +3219,94 @@ void Mob::TryApplyEffect(Mob *target, uint32 spell_id)
 			if(MakeRandomInt(0, 100) <= spells[spell_id].base[i])
 			{
 				if(target)
-					SpellFinished(spells[spell_id].base2[i], target);
+					SpellFinished(spells[spell_id].base2[i], target, 10, 0, -1, spells[spell_id].ResistDiff);
 			}
 		}
 	}
 }
+
+void Mob::TryTriggerOnValueAmount(bool IsHP, bool IsMana, bool IsEndur, bool IsPet)
+{
+	/*
+	At present time there is no obvious difference between ReqTarget and ReqCaster
+	ReqTarget is typically used in spells cast on a target where the trigger occurs on that target.
+	ReqCaster is typically self only spells where the triggers on self.
+	Regardless both trigger on the owner of the buff.
+	*/
+
+	/*
+	Base2 Range: 1004	 = Below < 80% HP
+	Base2 Range: 500-520 = Below (base2 - 500)*5 HP
+	Base2 Range: 521	 = Below (?) Mana UKNOWN - Will assume its 20% unless proven otherwise
+	Base2 Range: 522	 = Below (40%) Endurance
+	Base2 Range: 523	 = Below (40%) Mana
+	Base2 Range: 220-?	 = Number of pets on hatelist to trigger (base2 - 220) (Set at 30 pets max for now)
+	38311 = < 10% mana;
+	*/
+
+	if (!spellbonuses.TriggerOnValueAmount)
+		return;
+	
+	if (spellbonuses.TriggerOnValueAmount){
+
+		int buff_count = GetMaxTotalSlots();
+
+		for(int e = 0; e < buff_count; e++){
+
+			uint32 spell_id = buffs[e].spellid;
+
+			if (IsValidSpell(spell_id)){
+
+				for(int i = 0; i < EFFECT_COUNT; i++){
+
+					if ((spells[spell_id].effectid[i] == SE_TriggerOnReqTarget) || (spells[spell_id].effectid[i] == SE_TriggerOnReqCaster)) {
+
+						int base2 = spells[spell_id].base2[i];
+						bool use_spell = false;
+
+						if (IsHP){
+							if ((base2 >= 500 && base2 <= 520) && GetHPRatio() < (base2 - 500)*5)
+								use_spell = true;
+		
+							else if (base2 = 1004 && GetHPRatio() < 80)
+								use_spell = true;
+						}
+
+						else if (IsMana){
+							if ( (base2 = 521 && GetManaRatio() < 20) || (base2 = 523 && GetManaRatio() < 40)) 
+								use_spell = true;
+							
+							else if (base2 = 38311 && GetManaRatio() < 10)
+								use_spell = true;
+						}
+
+						else if (IsEndur){
+							if (base2 = 522 && GetEndurancePercent() < 40){
+								use_spell = true;
+							}
+						}
+
+						else if (IsPet){
+							int count = hate_list.SummonedPetCount(this);
+							if ((base2 >= 220 && base2 <= 250) && count >= (base2 - 220)){
+								use_spell = true;
+							}
+						}
+
+						if (use_spell){
+							SpellFinished(spells[spell_id].base[i], this, 10, 0, -1, spells[spell_id].ResistDiff);
+							
+							if(!TryFadeEffect(e))
+								BuffFadeBySlot(e);
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+
 //Twincast Focus effects should stack across different types (Spell, AA - when implemented ect)
 void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 {
@@ -3246,7 +3322,7 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 			if(MakeRandomInt(0, 100) <= focus)
 			{
 				Message(MT_Spells,"You twincast %s!",spells[spell_id].name);
-				SpellFinished(spell_id, target);
+				SpellFinished(spell_id, target, 10, 0, -1, spells[spell_id].ResistDiff);
 			}
 		}
 	}
@@ -3257,14 +3333,14 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 		int buff_count = GetMaxTotalSlots();
 		for(int i = 0; i < buff_count; i++)
 		{
-			if(IsEffectInSpell(buffs[i].spellid, SE_Twincast))
+			if(IsEffectInSpell(buffs[i].spellid, SE_FcTwincast))
 			{
 				int32 focus = CalcFocusEffect(focusTwincast, buffs[i].spellid, spell_id);
 				if(focus > 0)
 				{
 					if(MakeRandomInt(0, 100) <= focus)
 					{
-						SpellFinished(spell_id, target);
+						SpellFinished(spell_id, target, 10, 0, -1, spells[spell_id].ResistDiff);
 					}
 				}
 			}
@@ -3272,28 +3348,34 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 	}
 }
 
-int32 Mob::GetVulnerability(int32 damage, Mob *caster, uint32 spell_id, uint32 ticsremaining)
+int32 Mob::GetVulnerability(Mob* caster, uint32 spell_id, uint32 ticsremaining)
 {
+	if (!IsValidSpell(spell_id))
+		return 0;
+
 	if (!caster)
-		return damage;
+		return 0;
+	
+	int32 value = 0;
+
 	//Apply innate vulnerabilities
 	if (Vulnerability_Mod[GetSpellResistType(spell_id)] != 0)
-		damage += damage * Vulnerability_Mod[GetSpellResistType(spell_id)] / 100;
+		value = Vulnerability_Mod[GetSpellResistType(spell_id)];
 
 
 	else if (Vulnerability_Mod[HIGHEST_RESIST+1] != 0)
-		damage += damage * Vulnerability_Mod[HIGHEST_RESIST+1] / 100;
+		value = Vulnerability_Mod[HIGHEST_RESIST+1];
 
 	//Apply spell derived vulnerabilities
 	if (spellbonuses.FocusEffects[focusSpellVulnerability]){
-
+	
 		int32 tmp_focus = 0;
 		int tmp_buffslot = -1;
 
 		int buff_count = GetMaxTotalSlots();
 		for(int i = 0; i < buff_count; i++) {
 
-			if((IsValidSpell(buffs[i].spellid) && IsEffectInSpell(buffs[i].spellid, SE_SpellVulnerability))){
+			if((IsValidSpell(buffs[i].spellid) && IsEffectInSpell(buffs[i].spellid, SE_FcSpellVulnerability))){
 
 				int32 focus = caster->CalcFocusEffect(focusSpellVulnerability, buffs[i].spellid, spell_id);
 
@@ -3316,18 +3398,18 @@ int32 Mob::GetVulnerability(int32 damage, Mob *caster, uint32 spell_id, uint32 t
 		if (tmp_focus < -99)
 			tmp_focus = -99;
 
-		damage += damage * tmp_focus / 100;
+		value += tmp_focus;
 
 		if (tmp_buffslot >= 0)
-			CheckHitsRemaining(tmp_buffslot);
+			CheckNumHitsRemaining(7, tmp_buffslot);
 	}
-	return damage;
+	return value;
 }
 
-int16 Mob::GetSkillDmgTaken(const SkillType skill_used)
+int16 Mob::GetSkillDmgTaken(const SkillUseTypes skill_used)
 {
 	int skilldmg_mod = 0;
-
+	
 	// All skill dmg mod + Skill specific
 	skilldmg_mod += itembonuses.SkillDmgTaken[HIGHEST_SKILL+1] + spellbonuses.SkillDmgTaken[HIGHEST_SKILL+1] +
 					itembonuses.SkillDmgTaken[skill_used] + spellbonuses.SkillDmgTaken[skill_used];
@@ -3339,41 +3421,20 @@ int16 Mob::GetSkillDmgTaken(const SkillType skill_used)
 	if(skilldmg_mod < -100)
 		skilldmg_mod = -100;
 
-	if (spellbonuses.SkillDmgTaken[HIGHEST_SKILL+1] || spellbonuses.SkillDmgTaken[skill_used])
-		CheckHitsRemaining(0, false,false, SE_SkillDamageTaken,0,true,skill_used);
-
 	return skilldmg_mod;
 }
 
-int16 Mob::GetHealRate(uint16 spell_id)
-{
-	Mob* target = GetTarget();
-
+int16 Mob::GetHealRate(uint16 spell_id, Mob* caster) {
+	
 	int16 heal_rate = 0;
 
-	if (target){
-		heal_rate = target->itembonuses.HealRate + target->spellbonuses.HealRate;
+	heal_rate += itembonuses.HealRate + spellbonuses.HealRate + aabonuses.HealRate; 
+	heal_rate += GetFocusIncoming(focusFcHealPctIncoming, SE_FcHealPctIncoming, caster, spell_id); 
 
-		if (target->IsClient())
-			heal_rate += target->CastToClient()->GetFocusEffect(focusHealRate, spell_id);
-
-		if(heal_rate < -99)
-			heal_rate = -99;
-	}
-
+	if(heal_rate < -99)
+		heal_rate = -99;
+	
 	return heal_rate;
-}
-
-int16 Mob::GetCriticalHealRate(uint16 spell_id)
-{
-	Mob* target = GetTarget();
-
-	int16 critical_heal_rate = 0;
-
-	if (target && target->IsClient())
-		critical_heal_rate = target->CastToClient()->GetFocusEffect(focusCriticalHealRate, spell_id);
-
-	return critical_heal_rate;
 }
 
 bool Mob::TryFadeEffect(int slot)
@@ -3382,7 +3443,8 @@ bool Mob::TryFadeEffect(int slot)
 	{
 		for(int i = 0; i < EFFECT_COUNT; i++)
 		{
-			if (spells[buffs[slot].spellid].effectid[i] == SE_CastOnWearoff || spells[buffs[slot].spellid].effectid[i] == SE_EffectOnFade)
+			if (spells[buffs[slot].spellid].effectid[i] == SE_CastOnWearoff || spells[buffs[slot].spellid].effectid[i] == SE_EffectOnFade
+				|| spells[buffs[slot].spellid].effectid[i] == SE_TriggerMeleeThreshold || spells[buffs[slot].spellid].effectid[i] == SE_TriggerSpellThreshold)
 			{
 				uint16 spell_id = spells[buffs[slot].spellid].base[i];
 				BuffFadeBySlot(slot);
@@ -3427,7 +3489,7 @@ void Mob::TrySympatheticProc(Mob *target, uint32 spell_id)
 					SpellFinished(focus_trigger, target);
 
 				else
-					SpellFinished(focus_trigger, this);
+					SpellFinished(focus_trigger, this, 10, 0, -1, spells[focus_trigger].ResistDiff);
 			}
 			// For detrimental spells, if the triggered spell is beneficial, then it will land on the caster
 			// if the triggered spell is also detrimental, then it will land on the target
@@ -3437,9 +3499,10 @@ void Mob::TrySympatheticProc(Mob *target, uint32 spell_id)
 					SpellFinished(focus_trigger, this);
 
 				else
-					SpellFinished(focus_trigger, target);
+					SpellFinished(focus_trigger, target, 10, 0, -1, spells[focus_trigger].ResistDiff);
 			}
-			CheckHitsRemaining(0, false,false, 0, focus_spell);
+			
+			CheckNumHitsRemaining(7, 0, focus_spell);
 		}
 }
 
@@ -4207,11 +4270,11 @@ int16 Mob::GetMeleeDamageMod_SE(uint16 skill)
 	dmg_mod += itembonuses.DamageModifier[HIGHEST_SKILL+1] + spellbonuses.DamageModifier[HIGHEST_SKILL+1] + aabonuses.DamageModifier[HIGHEST_SKILL+1] +
 				itembonuses.DamageModifier[skill] + spellbonuses.DamageModifier[skill] + aabonuses.DamageModifier[skill];
 
+	if (HasShieldEquiped() && !IsOffHandAtk())
+		dmg_mod += itembonuses.ShieldEquipDmgMod[0] + spellbonuses.ShieldEquipDmgMod[0] + aabonuses.ShieldEquipDmgMod[0];
+
 	if(dmg_mod < -100)
 		dmg_mod = -100;
-
-	if (spellbonuses.DamageModifier[HIGHEST_SKILL+1] || spellbonuses.DamageModifier[skill])
-		CheckHitsRemaining(0, false, false, SE_DamageModifier,0,true,skill);
 
 	return dmg_mod;
 }
@@ -4259,25 +4322,38 @@ int16 Mob::GetSkillDmgAmt(uint16 skill)
 	skill_dmg += spellbonuses.SkillDamageAmount2[HIGHEST_SKILL+1] + itembonuses.SkillDamageAmount2[HIGHEST_SKILL+1]
 				+ itembonuses.SkillDamageAmount2[skill] + spellbonuses.SkillDamageAmount2[skill];
 
-	// Deplete the buff if needed
-	if (spellbonuses.SkillDamageAmount[HIGHEST_SKILL+1] || spellbonuses.SkillDamageAmount[skill])
-		CheckHitsRemaining(0, false,false, SE_SkillDamageAmount,0,true,skill);
-
-	if (spellbonuses.SkillDamageAmount2[HIGHEST_SKILL+1] || spellbonuses.SkillDamageAmount2[skill])
-		CheckHitsRemaining(0, false,false, SE_SkillDamageAmount2,0,true,skill);
-
 	return skill_dmg;
+}
+
+void Mob::MeleeLifeTap(int32 damage) {
+	
+	if(damage > 0 && (spellbonuses.MeleeLifetap || itembonuses.MeleeLifetap || aabonuses.MeleeLifetap ))
+	{
+		int lifetap_amt = spellbonuses.MeleeLifetap + itembonuses.MeleeLifetap + aabonuses.MeleeLifetap;
+		
+		if(lifetap_amt > 100)
+			lifetap_amt = 100;
+
+		else if (lifetap_amt < -99)
+			lifetap_amt = -99;
+
+
+		lifetap_amt = damage * lifetap_amt / 100;
+
+		mlog(COMBAT__DAMAGE, "Melee lifetap healing for %d damage.", damage);
+		//heal self for damage done..
+		HealDamage(lifetap_amt);
+	}
 }
 
 bool Mob::TryReflectSpell(uint32 spell_id)
 {
-	if(!GetTarget())
-		return false;
-
-	if(GetTarget()->spellbonuses.reflect_chance)
-		CheckHitsRemaining(0, false, false, SE_Reflect);
-
-	if(MakeRandomInt(0, 99) < (GetTarget()->itembonuses.reflect_chance + GetTarget()->spellbonuses.reflect_chance))
+	if (!spells[spell_id].reflectable)
+ 		return false;
+	
+	int chance = itembonuses.reflect_chance + spellbonuses.reflect_chance + aabonuses.reflect_chance;
+ 	
+	if(chance && MakeRandomInt(0, 99) < chance)
 		return true;
 
 	return false;
@@ -4430,22 +4506,22 @@ void Mob::SetBodyType(bodyType new_body, bool overwrite_orig) {
 }
 
 
-void Mob::ModSkillDmgTaken(SkillType skill_num, int value)
+void Mob::ModSkillDmgTaken(SkillUseTypes skill_num, int value)
 {
 	if (skill_num <= HIGHEST_SKILL)
 		SkillDmgTaken_Mod[skill_num] = value;
 
 
-	else if (skill_num == 255)
+	else if (skill_num == 255 || skill_num == -1)
 		SkillDmgTaken_Mod[HIGHEST_SKILL+1] = value;
 }
 
-int16 Mob::GetModSkillDmgTaken(const SkillType skill_num)
+int16 Mob::GetModSkillDmgTaken(const SkillUseTypes skill_num)
 {
 	if (skill_num <= HIGHEST_SKILL)
 		return SkillDmgTaken_Mod[skill_num];
 
-	else if (skill_num == 255)
+	else if (skill_num == 255 || skill_num == -1)
 		return SkillDmgTaken_Mod[HIGHEST_SKILL+1];
 
 	return 0;
@@ -4504,8 +4580,6 @@ void Mob::CastOnNumHitFade(uint32 spell_id)
 	if(!IsValidSpell(spell_id))
 		return;
 
-	uint32 buff_max = GetMaxTotalSlots();
-
 	for(int i = 0; i < EFFECT_COUNT; i++)
 	{
 		if (spells[spell_id].effectid[i] == SE_CastonNumHitFade)
@@ -4532,10 +4606,10 @@ int Mob::SlowMitigation(bool slow_msg, Mob *caster, int slow_value)
 			if ((int_slow_mitigation > 0.0f) && (int_slow_mitigation < 26.0f))
 				caster->Message(262, "Your spell was mostly successful");
 
-			else if ((int_slow_mitigation > 26.0f) && (int_slow_mitigation < 74.0f))
+			else if ((int_slow_mitigation >= 26.0f) && (int_slow_mitigation < 74.0f))
 				caster->Message(262, "Your spell was partially successful");
 
-			else if ((int_slow_mitigation > 74.0f) && (int_slow_mitigation < 101.0f))
+			else if ((int_slow_mitigation >= 74.0f) && (int_slow_mitigation < 101.0f))
 				caster->Message(262, "Your spell was slightly successful");
 		}
 		return 0;
@@ -4552,33 +4626,30 @@ uint16 Mob::GetSkillByItemType(int ItemType)
 {
 	switch (ItemType)
 	{
-		case ItemType1HS:
-			return _1H_SLASHING;
-		case ItemType2HS:
-			return _2H_SLASHING;
-		case ItemTypePierce:
-			return PIERCING;
-		case ItemType1HB:
-			return _1H_BLUNT;
-		case ItemType2HB:
-			return _2H_BLUNT;
-		case ItemType2HPierce:
-			return PIERCING;
-		case ItemTypeHand2Hand:
-			return HAND_TO_HAND;
+		case ItemType1HSlash:
+			return Skill1HSlashing;
+		case ItemType2HSlash:
+			return Skill2HSlashing;
+		case ItemType1HPiercing:
+			return Skill1HPiercing;
+		case ItemType1HBlunt:
+			return Skill1HBlunt;
+		case ItemType2HBlunt:
+			return Skill2HBlunt;
+		case ItemType2HPiercing:
+			return Skill1HPiercing; // change to 2HPiercing once activated
+		case ItemTypeMartial:
+			return SkillHandtoHand;
 		default:
-			return HAND_TO_HAND;
+			return SkillHandtoHand;
 	}
-	return HAND_TO_HAND;
+	return SkillHandtoHand;
  }
 
 
 bool Mob::PassLimitToSkill(uint16 spell_id, uint16 skill) {
 
 	if (!IsValidSpell(spell_id))
-		return false;
-
-	if (!IsEffectInSpell(spell_id, SE_LimitToSkill))
 		return false;
 
 	for (int i = 0; i < EFFECT_COUNT; i++) {
@@ -4589,6 +4660,44 @@ bool Mob::PassLimitToSkill(uint16 spell_id, uint16 skill) {
 		}
 	}
 	return false;
+}
+
+int8 Mob::GetDecayEffectValue(uint16 spell_id, uint16 spelleffect) {
+
+	if (!IsValidSpell(spell_id))
+		return false;
+
+	int spell_level = spells[spell_id].classes[(GetClass()%16) - 1]; 
+	int effect_value = 0;
+	int lvlModifier = 100;
+
+	int buff_count = GetMaxTotalSlots();
+	for (int slot = 0; slot < buff_count; slot++){
+		if (IsValidSpell(buffs[slot].spellid)){
+			for (int i = 0; i < EFFECT_COUNT; i++){
+				if(spells[buffs[slot].spellid].effectid[i] == spelleffect) {
+					
+					int critchance = spells[buffs[slot].spellid].base[i]; 
+					int decay = spells[buffs[slot].spellid].base2[i];
+					int lvldiff = spell_level - spells[buffs[slot].spellid].max[i]; 
+					
+					if(lvldiff > 0 && decay > 0)
+					{
+						lvlModifier -= decay*lvldiff; 
+						if (lvlModifier > 0){
+							critchance = (critchance*lvlModifier)/100; 
+							effect_value += critchance;
+						}
+					}
+
+					else
+						effect_value += critchance;
+				}
+			}
+		}
+	}
+	
+	return effect_value;
 }
 
 // Faction Mods for Alliance type spells
@@ -4653,7 +4762,7 @@ int32 Mob::GetItemFactionBonus(uint32 pFactionID) {
 
 void Mob::ClearItemFactionBonuses() {
 	std::map <uint32, int32> :: iterator itr;
-	for(itr = item_faction_bonuses.begin(); itr != item_faction_bonuses.end(); itr++)
+	for(itr = item_faction_bonuses.begin(); itr != item_faction_bonuses.end(); ++itr)
 	{
 		item_faction_bonuses.erase(itr->first);
 	}
@@ -4796,114 +4905,74 @@ bool Mob::HasSpellEffect(int effectid)
 }
 
 int Mob::GetSpecialAbility(int ability) {
-	auto iter = SpecialAbilities.find(ability);
-	if(iter != SpecialAbilities.end()) {
-		return iter->second.level;
-	}
-
-	return 0;
-}
-
-int Mob::GetSpecialAbilityParam(int ability, int param) {
-	if(param >= MAX_SPECIAL_ATTACK_PARAMS || param < 0) {
+	if(ability >= MAX_SPECIAL_ATTACK || ability < 0) {
 		return 0;
 	}
 
-	auto iter = SpecialAbilities.find(ability);
-	if(iter != SpecialAbilities.end()) {
-		return iter->second.params[param];
+	return SpecialAbilities[ability].level;
+}
+
+int Mob::GetSpecialAbilityParam(int ability, int param) {
+	if(param >= MAX_SPECIAL_ATTACK_PARAMS || param < 0 || ability >= MAX_SPECIAL_ATTACK || ability < 0) {
+		return 0;
 	}
 
-	return 0;
+	return SpecialAbilities[ability].params[param];
 }
 
 void Mob::SetSpecialAbility(int ability, int level) {
-	auto iter = SpecialAbilities.find(ability);
-	if(iter != SpecialAbilities.end()) {
-		SpecialAbility spec = iter->second;
-		spec.level = level;
-		SpecialAbilities[ability] = spec;
-	} else {
-		SpecialAbility spec;
-		memset(&spec, 0, sizeof spec);
-		spec.level = level;
-		spec.timer = nullptr;
-		SpecialAbilities[ability] = spec;
-	}
-}
-
-void Mob::SetSpecialAbilityParam(int ability, int param, int value) {
-	if(param >= MAX_SPECIAL_ATTACK_PARAMS || param < 0) {
+	if(ability >= MAX_SPECIAL_ATTACK || ability < 0) {
 		return;
 	}
 
-	auto iter = SpecialAbilities.find(ability);
-	if(iter != SpecialAbilities.end()) {
-		SpecialAbility spec = iter->second;
-		spec.params[param] = value;
-		SpecialAbilities[ability] = spec;
-	} else {
-		SpecialAbility spec;
-		memset(&spec, 0, sizeof spec);
-		spec.params[param] = value;
-		spec.timer = nullptr;
-		SpecialAbilities[ability] = spec;
+	SpecialAbilities[ability].level = level;
+}
+
+void Mob::SetSpecialAbilityParam(int ability, int param, int value) {
+	if(param >= MAX_SPECIAL_ATTACK_PARAMS || param < 0 || ability >= MAX_SPECIAL_ATTACK || ability < 0) {
+		return;
 	}
+
+	SpecialAbilities[ability].params[param] = value;
 }
 
 void Mob::StartSpecialAbilityTimer(int ability, uint32 time) {
-	auto iter = SpecialAbilities.find(ability);
-	if(iter != SpecialAbilities.end()) {
-		SpecialAbility spec = iter->second;
-		if(spec.timer) {
-			spec.timer->Start(time);
-		} else {
-			spec.timer = new Timer(time);
-			spec.timer->Start();
-		}
+	if (ability >= MAX_SPECIAL_ATTACK || ability < 0) {
+		return;
+	}
 
-		SpecialAbilities[ability] = spec;
+	if(SpecialAbilities[ability].timer) {
+		SpecialAbilities[ability].timer->Start(time);
 	} else {
-		SpecialAbility spec;
-		memset(&spec, 0, sizeof spec);
-		spec.timer = new Timer(time);
-		spec.timer->Start();
-		SpecialAbilities[ability] = spec;
+		SpecialAbilities[ability].timer = new Timer(time);
+		SpecialAbilities[ability].timer->Start();
 	}
 }
 
 void Mob::StopSpecialAbilityTimer(int ability) {
-	auto iter = SpecialAbilities.find(ability);
-	if(iter != SpecialAbilities.end()) {
-		SpecialAbility spec = iter->second;
-		if(spec.timer) {
-			delete spec.timer;
-			spec.timer = nullptr;
-		}
-
-		SpecialAbilities[ability] = spec;
+	if (ability >= MAX_SPECIAL_ATTACK || ability < 0) {
+		return;
 	}
+
+	safe_delete(SpecialAbilities[ability].timer);
 }
 
 Timer *Mob::GetSpecialAbilityTimer(int ability) {
-	auto iter = SpecialAbilities.find(ability);
-	if(iter != SpecialAbilities.end()) {
-		return iter->second.timer;
+	if (ability >= MAX_SPECIAL_ATTACK || ability < 0) {
+		return nullptr;
 	}
 
-	return nullptr;
+	return SpecialAbilities[ability].timer;
 }
 
 void Mob::ClearSpecialAbilities() {
-	auto iter = SpecialAbilities.begin();
-	while(iter != SpecialAbilities.end()) {
-		if(iter->second.timer) {
-			delete iter->second.timer;
+	for(int a = 0; a < MAX_SPECIAL_ATTACK; ++a) {
+		SpecialAbilities[a].level = 0;
+		safe_delete(SpecialAbilities[a].timer);
+		for(int p = 0; p < MAX_SPECIAL_ATTACK_PARAMS; ++p) {
+			SpecialAbilities[a].params[p] = 0;
 		}
-		++iter;
 	}
-
-	SpecialAbilities.clear();
 }
 
 void Mob::ProcessSpecialAbilities(const std::string str) {

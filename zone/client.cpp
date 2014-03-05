@@ -18,6 +18,7 @@
 #include "../common/debug.h"
 #include <iostream>
 #include <iomanip>
+#include <sstream>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -278,16 +279,19 @@ Client::Client(EQStreamInterface* ieqs)
 	m_KnockBackExemption = 0;
 	m_PortExemption = 0;
 	m_SenseExemption = 0;
+	m_AssistExemption = 0;
 	m_CheatDetectMoved = false;
 	CanUseReport = true;
 	aa_los_me.x = 0;
 	aa_los_me.y = 0;
 	aa_los_me.z = 0;
+	aa_los_me_heading = 0;
 	aa_los_them.x = 0;
 	aa_los_them.y = 0;
 	aa_los_them.z = 0;
 	aa_los_them_mob = nullptr;
 	los_status = false;
+	los_status_facing = false;
 	qGlobals = nullptr;
 	HideCorpseMode = HideCorpseNone;
 	PendingGuildInvitation = false;
@@ -319,6 +323,7 @@ Client::Client(EQStreamInterface* ieqs)
 	LoadAccountFlags();
 
 	initial_respawn_selection = 0;
+	alternate_currency_loaded = false;
 }
 
 Client::~Client() {
@@ -422,7 +427,6 @@ Client::~Client() {
 	eqs->Close();
 	eqs->ReleaseFromUse();
 
-	entity_list.RemoveClient(this);
 	UninitializeBuffSlots();
 }
 
@@ -488,7 +492,6 @@ bool Client::Save(uint8 iCommitNow) {
 
 	if(!ClientDataLoaded())
 		return false;
-	_ZP(Client_Save);
 
 	m_pp.x = x_pos;
 	m_pp.y = y_pos;
@@ -578,6 +581,7 @@ bool Client::Save(uint8 iCommitNow) {
 		m_petinfo.Mana = pet->GetMana();
 		pet->GetPetState(m_petinfo.Buffs, m_petinfo.Items, m_petinfo.Name);
 		m_petinfo.petpower = pet->GetPetPower();
+		m_petinfo.size = pet->GetSize();
 	} else {
 		memset(&m_petinfo, 0, sizeof(struct PetInfo));
 	}
@@ -698,16 +702,6 @@ bool Client::SendAllPackets() {
 }
 
 void Client::QueuePacket(const EQApplicationPacket* app, bool ack_req, CLIENT_CONN_STATUS required_state, eqFilterType filter) {
-/*	if (app->opcode==0x9999) {
-		cout << "Sending an unknown opcode from: " << endl;
-		print_stacktrace();
-	}
-	if (app->opcode==OP_SkillUpdate) {
-		cout << "Sending OP_SkillUpdate from: " << endl;
-		print_stacktrace();
-	}
-*/
-	_ZP(Client_QueuePacket);
 	if(filter!=FilterNone){
 		//this is incomplete... no support for FilterShowGroupOnly or FilterShowSelfOnly
 		if(GetFilter(filter) == FilterHide)
@@ -723,7 +717,6 @@ void Client::QueuePacket(const EQApplicationPacket* app, bool ack_req, CLIENT_CO
 	{
 		// todo: save packets for later use
 		AddPacket(app, ack_req);
-//		LogFile->write(EQEMuLog::Normal, "Adding Packet to list (%d) (%d)", app->GetOpcode(), (int)required_state);
 	}
 	else
 		if(eqs)
@@ -732,7 +725,7 @@ void Client::QueuePacket(const EQApplicationPacket* app, bool ack_req, CLIENT_CO
 
 void Client::FastQueuePacket(EQApplicationPacket** app, bool ack_req, CLIENT_CONN_STATUS required_state) {
 
-	//cout << "Sending: 0x" << hex << setw(4) << setfill('0') << (*app)->GetOpcode() << dec << ", size=" << (*app)->size << endl;
+	//std::cout << "Sending: 0x" << std::hex << std::setw(4) << std::setfill('0') << (*app)->GetOpcode() << std::dec << ", size=" << (*app)->size << std::endl;
 
 	// if the program doesnt care about the status or if the status isnt what we requested
 	if (required_state != CLIENT_CONNECTINGALL && client_state != required_state) {
@@ -1029,7 +1022,7 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
 			if(command_dispatch(this, message) == -2) {
 				if(parse->PlayerHasQuestSub(EVENT_COMMAND)) {
 					int i = parse->EventPlayer(EVENT_COMMAND, this, message, 0);
-					if(i != 0) {
+					if(i == 0) {
 						Message(13, "Command '%s' not recognized.", message);
 					}
 				} else {
@@ -1088,7 +1081,13 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
 	case 22:
 	{
 		// Emotes for Underfoot and later.
-		EQApplicationPacket* outapp = new EQApplicationPacket(OP_Emote, 4 + strlen(message) + strlen(GetName()) + 2);
+		// crash protection -- cheater
+		message[1023] = '\0';
+		size_t msg_len = strlen(message);
+		if (msg_len > 512)
+			message[512] = '\0';
+
+		EQApplicationPacket* outapp = new EQApplicationPacket(OP_Emote, 4 + msg_len + strlen(GetName()) + 2);
 		Emote_Struct* es = (Emote_Struct*)outapp->pBuffer;
 		char *Buffer = (char *)es;
 		Buffer += 4;
@@ -1397,7 +1396,7 @@ bool Client::UpdateLDoNPoints(int32 points, uint32 theme)
 	return(false);
 }
 
-void Client::SetSkill(SkillType skillid, uint16 value) {
+void Client::SetSkill(SkillUseTypes skillid, uint16 value) {
 	if (skillid > HIGHEST_SKILL)
 		return;
 	m_pp.skills[skillid] = value; // We need to be able to #setskill 254 and 255 to reset skills
@@ -1430,7 +1429,7 @@ void Client::IncreaseLanguageSkill(int skill_id, int value) {
 	Message_StringID( MT_Skills, LANG_SKILL_IMPROVED ); //Notify client
 }
 
-void Client::AddSkill(SkillType skillid, uint16 value) {
+void Client::AddSkill(SkillUseTypes skillid, uint16 value) {
 	if (skillid > HIGHEST_SKILL)
 		return;
 	value = GetRawSkill(skillid) + value;
@@ -1756,7 +1755,7 @@ void Client::SendManaUpdatePacket() {
 		SendEnduranceUpdate();
 	}
 
-	//cout << "Sending mana update: " << (cur_mana - last_reported_mana) << endl;
+	//std::cout << "Sending mana update: " << (cur_mana - last_reported_mana) << std::endl;
 	if (last_reported_mana != cur_mana || last_reported_endur != cur_end) {
 
 
@@ -1869,53 +1868,53 @@ void Client::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho)
 	const ItemInst* inst = nullptr;
 	if ((inst = m_inv[SLOT_HANDS]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_HANDS]	= item->Material;
-		ns->spawn.colors[MATERIAL_HANDS].color	= GetEquipmentColor(MATERIAL_HANDS);
+		ns->spawn.equipment[MaterialHands]	= item->Material;
+		ns->spawn.colors[MaterialHands].color	= GetEquipmentColor(MaterialHands);
 	}
 	if ((inst = m_inv[SLOT_HEAD]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_HEAD]	= item->Material;
-		ns->spawn.colors[MATERIAL_HEAD].color	= GetEquipmentColor(MATERIAL_HEAD);
+		ns->spawn.equipment[MaterialHead]	= item->Material;
+		ns->spawn.colors[MaterialHead].color	= GetEquipmentColor(MaterialHead);
 	}
 	if ((inst = m_inv[SLOT_ARMS]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_ARMS]	= item->Material;
-		ns->spawn.colors[MATERIAL_ARMS].color	= GetEquipmentColor(MATERIAL_ARMS);
+		ns->spawn.equipment[MaterialArms]	= item->Material;
+		ns->spawn.colors[MaterialArms].color	= GetEquipmentColor(MaterialArms);
 	}
 	if ((inst = m_inv[SLOT_BRACER01]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_BRACER]= item->Material;
-		ns->spawn.colors[MATERIAL_BRACER].color	= GetEquipmentColor(MATERIAL_BRACER);
+		ns->spawn.equipment[MaterialWrist]= item->Material;
+		ns->spawn.colors[MaterialWrist].color	= GetEquipmentColor(MaterialWrist);
 	}
 	if ((inst = m_inv[SLOT_BRACER02]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_BRACER]= item->Material;
-		ns->spawn.colors[MATERIAL_BRACER].color	= GetEquipmentColor(MATERIAL_BRACER);
+		ns->spawn.equipment[MaterialWrist]= item->Material;
+		ns->spawn.colors[MaterialWrist].color	= GetEquipmentColor(MaterialWrist);
 	}
 	if ((inst = m_inv[SLOT_CHEST]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_CHEST]	= item->Material;
-		ns->spawn.colors[MATERIAL_CHEST].color	= GetEquipmentColor(MATERIAL_CHEST);
+		ns->spawn.equipment[MaterialChest]	= item->Material;
+		ns->spawn.colors[MaterialChest].color	= GetEquipmentColor(MaterialChest);
 	}
 	if ((inst = m_inv[SLOT_LEGS]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_LEGS]	= item->Material;
-		ns->spawn.colors[MATERIAL_LEGS].color	= GetEquipmentColor(MATERIAL_LEGS);
+		ns->spawn.equipment[MaterialLegs]	= item->Material;
+		ns->spawn.colors[MaterialLegs].color	= GetEquipmentColor(MaterialLegs);
 	}
 	if ((inst = m_inv[SLOT_FEET]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
-		ns->spawn.equipment[MATERIAL_FEET]	= item->Material;
-		ns->spawn.colors[MATERIAL_FEET].color	= GetEquipmentColor(MATERIAL_FEET);
+		ns->spawn.equipment[MaterialFeet]	= item->Material;
+		ns->spawn.colors[MaterialFeet].color	= GetEquipmentColor(MaterialFeet);
 	}
 	if ((inst = m_inv[SLOT_PRIMARY]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
 		if (strlen(item->IDFile) > 2)
-			ns->spawn.equipment[MATERIAL_PRIMARY] = atoi(&item->IDFile[2]);
+			ns->spawn.equipment[MaterialPrimary] = atoi(&item->IDFile[2]);
 	}
 	if ((inst = m_inv[SLOT_SECONDARY]) && inst->IsType(ItemClassCommon)) {
 		item = inst->GetItem();
 		if (strlen(item->IDFile) > 2)
-			ns->spawn.equipment[MATERIAL_SECONDARY] = atoi(&item->IDFile[2]);
+			ns->spawn.equipment[MaterialSecondary] = atoi(&item->IDFile[2]);
 	}
 
 	//these two may be related to ns->spawn.texture
@@ -2306,7 +2305,7 @@ uint64 Client::GetAllMoney() {
 		(static_cast<uint64>(m_pp.platinum_shared) * 1000)))));
 }
 
-bool Client::CheckIncreaseSkill(SkillType skillid, Mob *against_who, int chancemodi) {
+bool Client::CheckIncreaseSkill(SkillUseTypes skillid, Mob *against_who, int chancemodi) {
 	if (IsAIControlled()) // no skillups while chamred =p
 		return false;
 	if (skillid > HIGHEST_SKILL)
@@ -2368,24 +2367,24 @@ void Client::CheckLanguageSkillIncrease(uint8 langid, uint8 TeacherSkill) {
 	}
 }
 
-bool Client::HasSkill(SkillType skill_id) const {
+bool Client::HasSkill(SkillUseTypes skill_id) const {
 	return((GetSkill(skill_id) > 0) && CanHaveSkill(skill_id));
 }
 
-bool Client::CanHaveSkill(SkillType skill_id) const {
+bool Client::CanHaveSkill(SkillUseTypes skill_id) const {
 	return(database.GetSkillCap(GetClass(), skill_id, RuleI(Character, MaxLevel)) > 0);
 	//if you don't have it by max level, then odds are you never will?
 }
 
-uint16 Client::MaxSkill(SkillType skillid, uint16 class_, uint16 level) const {
+uint16 Client::MaxSkill(SkillUseTypes skillid, uint16 class_, uint16 level) const {
 	return(database.GetSkillCap(class_, skillid, level));
 }
 
-uint8 Client::SkillTrainLevel(SkillType skillid, uint16 class_){
+uint8 Client::SkillTrainLevel(SkillUseTypes skillid, uint16 class_){
 	return(database.GetTrainLevel(class_, skillid, RuleI(Character, MaxLevel)));
 }
 
-uint16 Client::GetMaxSkillAfterSpecializationRules(SkillType skillid, uint16 maxSkill)
+uint16 Client::GetMaxSkillAfterSpecializationRules(SkillUseTypes skillid, uint16 maxSkill)
 {
 	uint16 Result = maxSkill;
 
@@ -2395,13 +2394,13 @@ uint16 Client::GetMaxSkillAfterSpecializationRules(SkillType skillid, uint16 max
 
 	uint16 MaxSpecializations = GetAA(aaSecondaryForte) ? 2 : 1;
 
-	if(skillid >= SPECIALIZE_ABJURE && skillid <= SPECIALIZE_EVOCATION)
+	if(skillid >= SkillSpecializeAbjure && skillid <= SkillSpecializeEvocation)
 	{
 		bool HasPrimarySpecSkill = false;
 
 		int NumberOfPrimarySpecSkills = 0;
 
-		for(int i = SPECIALIZE_ABJURE; i <= SPECIALIZE_EVOCATION; ++i)
+		for(int i = SkillSpecializeAbjure; i <= SkillSpecializeEvocation; ++i)
 		{
 			if(m_pp.skills[i] > 50)
 			{
@@ -2458,8 +2457,8 @@ uint16 Client::GetMaxSkillAfterSpecializationRules(SkillType skillid, uint16 max
 				Message(13, "Your spell casting specializations skills have been reset. "
 						"Only %i primary specialization skill is allowed.", MaxSpecializations);
 
-				for(int i = SPECIALIZE_ABJURE; i <= SPECIALIZE_EVOCATION; ++i)
-					SetSkill((SkillType)i, 1);
+				for(int i = SkillSpecializeAbjure; i <= SkillSpecializeEvocation; ++i)
+					SetSkill((SkillUseTypes)i, 1);
 
 				Save();
 
@@ -2472,7 +2471,7 @@ uint16 Client::GetMaxSkillAfterSpecializationRules(SkillType skillid, uint16 max
 	// This should possibly be handled by bonuses rather than here.
 	switch(skillid)
 	{
-		case TRACKING:
+		case SkillTracking:
 		{
 			Result += ((GetAA(aaAdvancedTracking) * 10) + (GetAA(aaTuneofPursuance) * 10));
 			break;
@@ -2690,13 +2689,13 @@ bool Client::BindWound(Mob* bindmob, bool start, bool fail){
 					bind_out->type = 1; // Done
 					QueuePacket(outapp);
 					bind_out->type = 0;
-					CheckIncreaseSkill(BIND_WOUND, nullptr, 5);
+					CheckIncreaseSkill(SkillBindWound, nullptr, 5);
 
 					int maxHPBonus = spellbonuses.MaxBindWound + itembonuses.MaxBindWound + aabonuses.MaxBindWound;
 
 					int max_percent = 50 + 10 * maxHPBonus;
 
-					if(GetClass() == MONK && GetSkill(BIND_WOUND) > 200) {
+					if(GetClass() == MONK && GetSkill(SkillBindWound) > 200) {
 						max_percent = 70 + 10 * maxHPBonus;
 					}
 
@@ -2710,10 +2709,10 @@ bool Client::BindWound(Mob* bindmob, bool start, bool fail){
 						int bindhps = 3;
 
 
-						if (GetSkill(BIND_WOUND) > 200) {
-							bindhps += GetSkill(BIND_WOUND)*4/10;
-						} else if (GetSkill(BIND_WOUND) >= 10) {
-							bindhps += GetSkill(BIND_WOUND)/4;
+						if (GetSkill(SkillBindWound) > 200) {
+							bindhps += GetSkill(SkillBindWound)*4/10;
+						} else if (GetSkill(SkillBindWound) >= 10) {
+							bindhps += GetSkill(SkillBindWound)/4;
 						}
 
 						//Implementation of aaMithanielsBinding is a guess (the multiplier)
@@ -2773,25 +2772,25 @@ void Client::SetMaterial(int16 in_slot, uint32 item_id){
 	const Item_Struct* item = database.GetItem(item_id);
 	if (item && (item->ItemClass==ItemClassCommon)) {
 		if (in_slot==SLOT_HEAD)
-			m_pp.item_material[MATERIAL_HEAD]		= item->Material;
+			m_pp.item_material[MaterialHead]		= item->Material;
 		else if (in_slot==SLOT_CHEST)
-			m_pp.item_material[MATERIAL_CHEST]		= item->Material;
+			m_pp.item_material[MaterialChest]		= item->Material;
 		else if (in_slot==SLOT_ARMS)
-			m_pp.item_material[MATERIAL_ARMS]		= item->Material;
+			m_pp.item_material[MaterialArms]		= item->Material;
 		else if (in_slot==SLOT_BRACER01)
-			m_pp.item_material[MATERIAL_BRACER]		= item->Material;
+			m_pp.item_material[MaterialWrist]		= item->Material;
 		else if (in_slot==SLOT_BRACER02)
-			m_pp.item_material[MATERIAL_BRACER]		= item->Material;
+			m_pp.item_material[MaterialWrist]		= item->Material;
 		else if (in_slot==SLOT_HANDS)
-			m_pp.item_material[MATERIAL_HANDS]		= item->Material;
+			m_pp.item_material[MaterialHands]		= item->Material;
 		else if (in_slot==SLOT_LEGS)
-			m_pp.item_material[MATERIAL_LEGS]		= item->Material;
+			m_pp.item_material[MaterialLegs]		= item->Material;
 		else if (in_slot==SLOT_FEET)
-			m_pp.item_material[MATERIAL_FEET]		= item->Material;
+			m_pp.item_material[MaterialFeet]		= item->Material;
 		else if (in_slot==SLOT_PRIMARY)
-			m_pp.item_material[MATERIAL_PRIMARY]	= atoi(item->IDFile+2);
+			m_pp.item_material[MaterialPrimary]	= atoi(item->IDFile+2);
 		else if (in_slot==SLOT_SECONDARY)
-			m_pp.item_material[MATERIAL_SECONDARY]	= atoi(item->IDFile+2);
+			m_pp.item_material[MaterialSecondary]	= atoi(item->IDFile+2);
 	}
 }
 
@@ -2853,7 +2852,12 @@ void Client::ServerFilter(SetServerFilter_Struct* filter){
 	else
 		ClientFilters[FilterSpellCrits] = FilterHide;
 
-	Filter1(FilterMeleeCrits);
+	if (filter->filters[FilterMeleeCrits] == 0)
+		ClientFilters[FilterMeleeCrits] = FilterShow;
+	else if (filter->filters[FilterMeleeCrits] == 1)
+		ClientFilters[FilterMeleeCrits] = FilterShowSelfOnly;
+	else
+		ClientFilters[FilterMeleeCrits] = FilterHide;
 
 	if(filter->filters[FilterSpellDamage] == 0)
 		ClientFilters[FilterSpellDamage] = FilterShow;
@@ -2867,12 +2871,41 @@ void Client::ServerFilter(SetServerFilter_Struct* filter){
 	Filter0(FilterOthersHit);
 	Filter0(FilterMissedMe);
 	Filter1(FilterDamageShields);
-	Filter1(FilterDOT);
+
+	if (GetClientVersionBit() & BIT_SoDAndLater) {
+		if (filter->filters[FilterDOT] == 0)
+			ClientFilters[FilterDOT] = FilterShow;
+		else if (filter->filters[FilterDOT] == 1)
+			ClientFilters[FilterDOT] = FilterShowSelfOnly;
+		else if (filter->filters[FilterDOT] == 2)
+			ClientFilters[FilterDOT] = FilterShowGroupOnly;
+		else
+			ClientFilters[FilterDOT] = FilterHide;
+	} else {
+		if (filter->filters[FilterDOT] == 0) // show functions as self only
+			ClientFilters[FilterDOT] = FilterShowSelfOnly;
+		else
+			ClientFilters[FilterDOT] = FilterHide;
+	}
+
 	Filter1(FilterPetHits);
 	Filter1(FilterPetMisses);
 	Filter1(FilterFocusEffects);
 	Filter1(FilterPetSpells);
-	Filter1(FilterHealOverTime);
+
+	if (GetClientVersionBit() & BIT_SoDAndLater) {
+		if (filter->filters[FilterHealOverTime] == 0)
+			ClientFilters[FilterHealOverTime] = FilterShow;
+		// This is called 'Show Mine Only' in the clients, but functions the same as show
+		// so instead of apply special logic, just set to show
+		else if (filter->filters[FilterHealOverTime] == 1)
+			ClientFilters[FilterHealOverTime] = FilterShow;
+		else
+			ClientFilters[FilterHealOverTime] = FilterHide;
+	} else {
+		// these clients don't have a 'self only' filter
+		Filter1(FilterHealOverTime);
+	}
 }
 
 // this version is for messages with no parameters
@@ -2964,6 +2997,111 @@ void Client::Message_StringID(uint32 type, uint32 string_id, const char* message
 	safe_delete(outapp);
 }
 
+// helper function, returns true if we should see the message
+bool Client::FilteredMessageCheck(Mob *sender, eqFilterType filter)
+{
+	eqFilterMode mode = GetFilter(filter);
+	// easy ones first
+	if (mode == FilterShow)
+		return true;
+	else if (mode == FilterHide)
+		return false;
+
+	if (!sender && mode == FilterHide) {
+		return false;
+	} else if (sender) {
+		if (this == sender) {
+			if (mode == FilterHide) // don't need to check others
+				return false;
+		} else if (mode == FilterShowSelfOnly) { // we know sender isn't us
+			return false;
+		} else if (mode == FilterShowGroupOnly) {
+			Group *g = GetGroup();
+			Raid *r = GetRaid();
+			if (g) {
+				if (g->IsGroupMember(sender))
+					return true;
+			} else if (r && sender->IsClient()) {
+				uint32 rgid1 = r->GetGroup(this);
+				uint32 rgid2 = r->GetGroup(sender->CastToClient());
+				if (rgid1 != 0xFFFFFFFF && rgid1 == rgid2)
+					return true;
+			} else {
+				return false;
+			}
+		}
+	}
+
+	// we passed our checks
+	return true;
+}
+
+void Client::FilteredMessage_StringID(Mob *sender, uint32 type,
+		eqFilterType filter, uint32 string_id)
+{
+	if (!FilteredMessageCheck(sender, filter))
+		return;
+
+	EQApplicationPacket *outapp = new EQApplicationPacket(OP_SimpleMessage, 12);
+	SimpleMessage_Struct *sms = (SimpleMessage_Struct *)outapp->pBuffer;
+	sms->color = type;
+	sms->string_id = string_id;
+
+	sms->unknown8 = 0;
+
+	QueuePacket(outapp);
+	safe_delete(outapp);
+
+	return;
+}
+
+void Client::FilteredMessage_StringID(Mob *sender, uint32 type, eqFilterType filter, uint32 string_id,
+		const char *message1, const char *message2, const char *message3,
+		const char *message4, const char *message5, const char *message6,
+		const char *message7, const char *message8, const char *message9)
+{
+	if (!FilteredMessageCheck(sender, filter))
+		return;
+
+	int i, argcount, length;
+	char *bufptr;
+	const char *message_arg[9] = {0};
+
+	if (type == MT_Emote)
+		type = 4;
+
+	if (!message1) {
+		FilteredMessage_StringID(sender, type, filter, string_id);	// use the simple message instead
+		return;
+	}
+
+	i = 0;
+	message_arg[i++] = message1;
+	message_arg[i++] = message2;
+	message_arg[i++] = message3;
+	message_arg[i++] = message4;
+	message_arg[i++] = message5;
+	message_arg[i++] = message6;
+	message_arg[i++] = message7;
+	message_arg[i++] = message8;
+	message_arg[i++] = message9;
+
+	for (argcount = length = 0; message_arg[argcount]; argcount++)
+		length += strlen(message_arg[argcount]) + 1;
+
+	EQApplicationPacket *outapp = new EQApplicationPacket(OP_FormattedMessage, length+13);
+	FormattedMessage_Struct *fm = (FormattedMessage_Struct *)outapp->pBuffer;
+	fm->string_id = string_id;
+	fm->type = type;
+	bufptr = fm->message;
+	for (i = 0; i < argcount; i++) {
+		strcpy(bufptr, message_arg[i]);
+		bufptr += strlen(message_arg[i]) + 1;
+	}
+
+	QueuePacket(outapp);
+	safe_delete(outapp);
+}
 
 void Client::SetTint(int16 in_slot, uint32 color) {
 	Color_Struct new_color;
@@ -2974,25 +3112,25 @@ void Client::SetTint(int16 in_slot, uint32 color) {
 // Still need to reconcile bracer01 versus bracer02
 void Client::SetTint(int16 in_slot, Color_Struct& color) {
 	if (in_slot==SLOT_HEAD)
-		m_pp.item_tint[MATERIAL_HEAD].color=color.color;
+		m_pp.item_tint[MaterialHead].color=color.color;
 	else if (in_slot==SLOT_ARMS)
-		m_pp.item_tint[MATERIAL_ARMS].color=color.color;
+		m_pp.item_tint[MaterialArms].color=color.color;
 	else if (in_slot==SLOT_BRACER01)
-		m_pp.item_tint[MATERIAL_BRACER].color=color.color;
+		m_pp.item_tint[MaterialWrist].color=color.color;
 	else if (in_slot==SLOT_BRACER02)
-		m_pp.item_tint[MATERIAL_BRACER].color=color.color;
+		m_pp.item_tint[MaterialWrist].color=color.color;
 	else if (in_slot==SLOT_HANDS)
-		m_pp.item_tint[MATERIAL_HANDS].color=color.color;
+		m_pp.item_tint[MaterialHands].color=color.color;
 	else if (in_slot==SLOT_PRIMARY)
-		m_pp.item_tint[MATERIAL_PRIMARY].color=color.color;
+		m_pp.item_tint[MaterialPrimary].color=color.color;
 	else if (in_slot==SLOT_SECONDARY)
-		m_pp.item_tint[MATERIAL_SECONDARY].color=color.color;
+		m_pp.item_tint[MaterialSecondary].color=color.color;
 	else if (in_slot==SLOT_CHEST)
-		m_pp.item_tint[MATERIAL_CHEST].color=color.color;
+		m_pp.item_tint[MaterialChest].color=color.color;
 	else if (in_slot==SLOT_LEGS)
-		m_pp.item_tint[MATERIAL_LEGS].color=color.color;
+		m_pp.item_tint[MaterialLegs].color=color.color;
 	else if (in_slot==SLOT_FEET)
-		m_pp.item_tint[MATERIAL_FEET].color=color.color;
+		m_pp.item_tint[MaterialFeet].color=color.color;
 }
 
 void Client::SetHideMe(bool flag)
@@ -3061,25 +3199,25 @@ uint8 Client::SlotConvert(uint8 slot,bool bracer){
 	if(bracer)
 		return SLOT_BRACER02;
 	switch(slot){
-		case MATERIAL_HEAD:
+		case MaterialHead:
 			slot2=SLOT_HEAD;
 			break;
-		case MATERIAL_CHEST:
+		case MaterialChest:
 			slot2=SLOT_CHEST;
 			break;
-		case MATERIAL_ARMS:
+		case MaterialArms:
 			slot2=SLOT_ARMS;
 			break;
-		case MATERIAL_BRACER:
+		case MaterialWrist:
 			slot2=SLOT_BRACER01;
 			break;
-		case MATERIAL_HANDS:
+		case MaterialHands:
 			slot2=SLOT_HANDS;
 			break;
-		case MATERIAL_LEGS:
+		case MaterialLegs:
 			slot2=SLOT_LEGS;
 			break;
-		case MATERIAL_FEET:
+		case MaterialFeet:
 			slot2=SLOT_FEET;
 			break;
 		}
@@ -3090,25 +3228,25 @@ uint8 Client::SlotConvert2(uint8 slot){
 	uint8 slot2=0;
 	switch(slot){
 		case SLOT_HEAD:
-			slot2=MATERIAL_HEAD;
+			slot2=MaterialHead;
 			break;
 		case SLOT_CHEST:
-			slot2=MATERIAL_CHEST;
+			slot2=MaterialChest;
 			break;
 		case SLOT_ARMS:
-			slot2=MATERIAL_ARMS;
+			slot2=MaterialArms;
 			break;
 		case SLOT_BRACER01:
-			slot2=MATERIAL_BRACER;
+			slot2=MaterialWrist;
 			break;
 		case SLOT_HANDS:
-			slot2=MATERIAL_HANDS;
+			slot2=MaterialHands;
 			break;
 		case SLOT_LEGS:
-			slot2=MATERIAL_LEGS;
+			slot2=MaterialLegs;
 			break;
 		case SLOT_FEET:
-			slot2=MATERIAL_FEET;
+			slot2=MaterialFeet;
 			break;
 		}
 	return slot2;
@@ -3711,7 +3849,7 @@ void Client::SendPickPocketResponse(Mob *from, uint32 amt, int type, const Item_
 		pick_out->coin = amt;
 		pick_out->from = GetID();
 		pick_out->to = from->GetID();
-		pick_out->myskill = GetSkill(PICK_POCKETS);
+		pick_out->myskill = GetSkill(SkillPickPockets);
 
 		if((type >= PickPocketPlatinum) && (type <= PickPocketCopper) && (amt == 0))
 			type = PickPocketFailed;
@@ -3984,11 +4122,11 @@ void Client::UpdateLFP() {
 
 uint16 Client::GetPrimarySkillValue()
 {
-	SkillType skill = HIGHEST_SKILL; //because nullptr == 0, which is 1H Slashing, & we want it to return 0 from GetSkill
+	SkillUseTypes skill = HIGHEST_SKILL; //because nullptr == 0, which is 1H Slashing, & we want it to return 0 from GetSkill
 	bool equiped = m_inv.GetItem(13);
 
 	if (!equiped)
-		skill = HAND_TO_HAND;
+		skill = SkillHandtoHand;
 
 	else {
 
@@ -3996,44 +4134,44 @@ uint16 Client::GetPrimarySkillValue()
 
 		switch (type)
 		{
-			case ItemType1HS: // 1H Slashing
+			case ItemType1HSlash: // 1H Slashing
 			{
-				skill = _1H_SLASHING;
+				skill = Skill1HSlashing;
 				break;
 			}
-			case ItemType2HS: // 2H Slashing
+			case ItemType2HSlash: // 2H Slashing
 			{
-				skill = _2H_SLASHING;
+				skill = Skill2HSlashing;
 				break;
 			}
-			case ItemTypePierce: // Piercing
+			case ItemType1HPiercing: // Piercing
 			{
-				skill = PIERCING;
+				skill = Skill1HPiercing;
 				break;
 			}
-			case ItemType1HB: // 1H Blunt
+			case ItemType1HBlunt: // 1H Blunt
 			{
-				skill = _1H_BLUNT;
+				skill = Skill1HBlunt;
 				break;
 			}
-			case ItemType2HB: // 2H Blunt
+			case ItemType2HBlunt: // 2H Blunt
 			{
-				skill = _2H_BLUNT;
+				skill = Skill2HBlunt;
 				break;
 			}
-			case ItemType2HPierce: // 2H Piercing
+			case ItemType2HPiercing: // 2H Piercing
 			{
-				skill = PIERCING;
+				skill = Skill1HPiercing; // change to Skill2HPiercing once activated
 				break;
 			}
-			case ItemTypeHand2Hand: // Hand to Hand
+			case ItemTypeMartial: // Hand to Hand
 			{
-				skill = HAND_TO_HAND;
+				skill = SkillHandtoHand;
 				break;
 			}
 			default: // All other types default to Hand to Hand
 			{
-				skill = HAND_TO_HAND;
+				skill = SkillHandtoHand;
 				break;
 			}
 		}
@@ -4048,7 +4186,7 @@ uint16 Client::GetTotalATK()
 	uint16 WornCap = itembonuses.ATK;
 
 	if(IsClient()) {
-		AttackRating = ((WornCap * 1.342) + (GetSkill(OFFENSE) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69));
+		AttackRating = ((WornCap * 1.342) + (GetSkill(SkillOffense) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69));
 		AttackRating += aabonuses.ATK + GroupLeadershipAAOffenseEnhancement();
 
 		if (AttackRating < 10)
@@ -4066,7 +4204,7 @@ uint16 Client::GetATKRating()
 {
 	uint16 AttackRating = 0;
 	if(IsClient()) {
-		AttackRating = (GetSkill(OFFENSE) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69);
+		AttackRating = (GetSkill(SkillOffense) * 1.345) + ((GetSTR() - 66) * 0.9) + (GetPrimarySkillValue() * 2.69);
 
 		if (AttackRating < 10)
 			AttackRating = 10;
@@ -4417,7 +4555,7 @@ void Client::HandleLDoNOpen(NPC *target)
 					AddEXP(target->GetLevel()*target->GetLevel()*2625/10, GetLevelCon(target->GetLevel()));
 				}
 			}
-			target->Death(this, 1, SPELL_UNKNOWN, HAND_TO_HAND);
+			target->Death(this, 1, SPELL_UNKNOWN, SkillHandtoHand);
 		}
 	}
 }
@@ -4735,8 +4873,8 @@ void Client::ShowSkillsWindow()
 	const char *WindowTitle = "Skills";
 	std::string WindowText;
 	// using a map for easy alphabetizing of the skills list
-	std::map<std::string, SkillType> Skills;
-	std::map<std::string, SkillType>::iterator it;
+	std::map<std::string, SkillUseTypes> Skills;
+	std::map<std::string, SkillUseTypes>::iterator it;
 
 	// this list of names must keep the same order as that in common/skills.h
 	const char* SkillName[] = {"1H Blunt","1H Slashing","2H Blunt","2H Slashing","Abjuration","Alteration","Apply Poison","Archery",
@@ -4748,10 +4886,10 @@ void Client::ShowSkillsWindow()
 		"Alchemy","Baking","Tailoring","Sense Traps","Blacksmithing","Fletching","Brewing","Alcohol Tolerance","Begging","Jewelry Making",
 		"Pottery","Percussion Instruments","Intimidation","Berserking","Taunt","Frenzy"};
 	for(int i = 0; i <= (int)HIGHEST_SKILL; i++)
-		Skills[SkillName[i]] = (SkillType)i;
+		Skills[SkillName[i]] = (SkillUseTypes)i;
 
 	// print out all available skills
-	for(it = Skills.begin(); it != Skills.end(); it++) {
+	for(it = Skills.begin(); it != Skills.end(); ++it) {
 		if(GetSkill(it->second) > 0 || MaxSkill(it->second) > 0) {
 			WindowText += it->first;
 			// line up the values
@@ -5145,7 +5283,7 @@ void Client::SendRewards()
 				{
 					break;
 				}
-				iter++;
+				++iter;
 			}
 
 			if(iter != zone->VeteranRewards.end())
@@ -5235,7 +5373,7 @@ bool Client::TryReward(uint32 claim_id)
 		{
 			break;
 		}
-		iter++;
+		++iter;
 	}
 
 	if(iter == zone->VeteranRewards.end())
@@ -5441,7 +5579,7 @@ void Client::SuspendMinion()
 		if(m_suspendedminion.SpellID > 0)
 		{
 			MakePoweredPet(m_suspendedminion.SpellID, spells[m_suspendedminion.SpellID].teleport_zone,
-				m_suspendedminion.petpower, m_suspendedminion.Name);
+				m_suspendedminion.petpower, m_suspendedminion.Name, m_suspendedminion.size);
 
 			CurrentPet = GetPet()->CastToNPC();
 
@@ -5501,6 +5639,7 @@ void Client::SuspendMinion()
 
 				m_suspendedminion.Mana = CurrentPet->GetMana();
 				m_suspendedminion.petpower = CurrentPet->GetPetPower();
+				m_suspendedminion.size = CurrentPet->GetSize();
 
 				if(AALevel >= 2)
 					CurrentPet->GetPetState(m_suspendedminion.Buffs, m_suspendedminion.Items, m_suspendedminion.Name);
@@ -6045,11 +6184,10 @@ void Client::NPCSpawn(NPC *target_npc, const char *identifier, uint32 extra)
 	}
 }
 
-bool Client::IsDraggingCorpse(const char *CorpseName)
+bool Client::IsDraggingCorpse(uint16 CorpseID)
 {
-	for(std::list<std::string>::iterator Iterator = DraggedCorpses.begin(); Iterator != DraggedCorpses.end(); ++Iterator)
-	{
-		if(!strcasecmp((*Iterator).c_str(), CorpseName))
+	for (auto It = DraggedCorpses.begin(); It != DraggedCorpses.end(); ++It) {
+		if (It->second == CorpseID)
 			return true;
 	}
 
@@ -6058,20 +6196,22 @@ bool Client::IsDraggingCorpse(const char *CorpseName)
 
 void Client::DragCorpses()
 {
-	for(std::list<std::string>::iterator Iterator = DraggedCorpses.begin(); Iterator != DraggedCorpses.end(); ++Iterator)
-	{
-		Mob* corpse = entity_list.GetMob((*Iterator).c_str());
+	for (auto It = DraggedCorpses.begin(); It != DraggedCorpses.end(); ++It) {
+		Mob *corpse = entity_list.GetMob(It->second);
 
-		if(corpse && corpse->IsPlayerCorpse() && (DistNoRootNoZ(*corpse) <= RuleR(Character, DragCorpseDistance)))
+		if (corpse && corpse->IsPlayerCorpse() &&
+				(DistNoRootNoZ(*corpse) <= RuleR(Character, DragCorpseDistance)))
 			continue;
 
-		if(!corpse || !corpse->IsPlayerCorpse() || corpse->CastToCorpse()->IsBeingLooted() || !corpse->CastToCorpse()->Summon(this, false, false))
-		{
+		if (!corpse || !corpse->IsPlayerCorpse() ||
+				corpse->CastToCorpse()->IsBeingLooted() ||
+				!corpse->CastToCorpse()->Summon(this, false, false)) {
 			Message_StringID(MT_DefaultText, CORPSEDRAG_STOP);
-			Iterator = DraggedCorpses.erase(Iterator);
+			It = DraggedCorpses.erase(It);
 		}
 	}
 }
+
 void Client::Doppelganger(uint16 spell_id, Mob *target, const char *name_override, int pet_count, int pet_duration)
 {
 	if(!target || !IsValidSpell(spell_id) || this->GetID() == target->GetID())
@@ -6133,7 +6273,7 @@ void Client::Doppelganger(uint16 spell_id, Mob *target, const char *name_overrid
 	made_npc->drakkin_details = GetDrakkinDetails();
 	made_npc->d_meele_texture1 = GetEquipmentMaterial(7);
 	made_npc->d_meele_texture2 = GetEquipmentMaterial(8);
-	for (int i = 0; i < MAX_MATERIALS; i++)	{
+	for (int i = 0; i < _MaterialCount; i++)	{
 		made_npc->armor_tint[i] = GetEquipmentColor(i);
 	}
 	made_npc->loottable_id = 0;
@@ -6608,7 +6748,7 @@ void Client::SendStatsWindow(Client* client, bool use_window)
 
 	for(std::map <uint32, int32>::iterator iter = item_faction_bonuses.begin();
 		iter != item_faction_bonuses.end();
-		iter++)
+		++iter)
 	{
 		memset(&faction_buf, 0, sizeof(faction_buf));
 
@@ -6632,34 +6772,36 @@ void Client::SendStatsWindow(Client* client, bool use_window)
 					indP + "Wind: " + itoa(GetWindMod()) + "<br>";
 	}
 
-	std::string final_stats = "" +
-	/*	C/L/R	*/	indP + "Class: " + class_Name + indS + "Level: " + itoa(GetLevel()) + indS + "Race: " + race_Name + "<br>" +
-	/*	Runes	*/	indP + "Rune: " + itoa(rune_number) + indL + indS + "Spell Rune: " + itoa(magic_rune_number) + "<br>" +
-	/*	HP/M/E	*/	HME_row +
-	/*	DS		*/	indP + "DS: " + itoa(itembonuses.DamageShield + spellbonuses.DamageShield*-1) + " (Spell: " + itoa(spellbonuses.DamageShield*-1) + " + Item: " + itoa(itembonuses.DamageShield) + " / " + itoa(RuleI(Character, ItemDamageShieldCap)) + ")<br>" +
-	/*	Atk		*/	indP + "<c \"#CCFF00\">ATK: " + itoa(GetTotalATK()) + "</c><br>" +
-	/*	Atk2	*/	indP + "- Base: " + itoa(GetATKRating()) + " | Item: " + itoa(itembonuses.ATK) + " (" + itoa(RuleI(Character, ItemATKCap)) + ")~Used: " + itoa((itembonuses.ATK * 1.342)) + " | Spell: " + itoa(spellbonuses.ATK) + "<br>" +
-	/*	AC		*/	indP + "<c \"#CCFF00\">AC: " + itoa(CalcAC()) + "</c><br>" +
-	/*	AC2		*/	indP + "- Mit: " + itoa(GetACMit()) + " | Avoid: " + itoa(GetACAvoid()) + " | Spell: " + itoa(spellbonuses.AC) + " | Shield: " + itoa(shield_ac) + "<br>" +
-	/*	Haste	*/	indP + "<c \"#CCFF00\">Haste: " + itoa(GetHaste()) + "</c><br>" +
-	/*	Haste2	*/	indP + " - Item: " + itoa(itembonuses.haste) + " + Spell: " + itoa(spellbonuses.haste + spellbonuses.hastetype2) + " (Cap: " + itoa(RuleI(Character, HasteCap)) + ") | Over: " + itoa(spellbonuses.hastetype3 + ExtraHaste) + "<br><br>" +
-	/* RegenLbl	*/	indL + indS + "Regen<br>" + indS + indP + indP + " Base | Items (Cap) " + indP + " | Spell | A.A.s | Total<br>" +
-	/*	Regen	*/	regen_string + "<br>" +
-	/*	Stats	*/	stat_field + "<br><br>" +
-	/*	Mod2s	*/	mod2_field + "<br>" +
-	/*	HealAmt	*/	indP + "Heal Amount: " + itoa(GetHealAmt()) + " / " + itoa(RuleI(Character, ItemHealAmtCap)) + "<br>" +
-	/*	SpellDmg*/	indP + "Spell Dmg: " + itoa(GetSpellDmg()) + " / " + itoa(RuleI(Character, ItemSpellDmgCap)) + "<br>" +
-	/*	Clair	*/	indP + "Clairvoyance: " + itoa(GetClair()) + " / " + itoa(RuleI(Character, ItemClairvoyanceCap)) + "<br>" +
-	/*	DSMit	*/	indP + "Dmg Shld Mit: " + itoa(GetDSMit()) + " / " + itoa(RuleI(Character, ItemDSMitigationCap)) + "<br><br>";
+	std::ostringstream final_string;
+					final_string <<
+	/*	C/L/R	*/	indP << "Class: " << class_Name << indS << "Level: " << static_cast<int>(GetLevel()) << indS << "Race: " << race_Name << "<br>" <<
+	/*	Runes	*/	indP << "Rune: " << rune_number << indL << indS << "Spell Rune: " << magic_rune_number << "<br>" <<
+	/*	HP/M/E	*/	HME_row <<
+	/*	DS		*/	indP << "DS: " << (itembonuses.DamageShield + spellbonuses.DamageShield*-1) << " (Spell: " << (spellbonuses.DamageShield*-1) << " + Item: " << itembonuses.DamageShield << " / " << RuleI(Character, ItemDamageShieldCap) << ")<br>" <<
+	/*	Atk		*/	indP << "<c \"#CCFF00\">ATK: " << GetTotalATK() << "</c><br>" <<
+	/*	Atk2	*/	indP << "- Base: " << GetATKRating() << " | Item: " << itembonuses.ATK << " (" << RuleI(Character, ItemATKCap) << ")~Used: " << (itembonuses.ATK * 1.342) << " | Spell: " << spellbonuses.ATK << "<br>" <<
+	/*	AC		*/	indP << "<c \"#CCFF00\">AC: " << CalcAC() << "</c><br>" <<
+	/*	AC2		*/	indP << "- Mit: " << GetACMit() << " | Avoid: " << GetACAvoid() << " | Spell: " << spellbonuses.AC << " | Shield: " << shield_ac << "<br>" <<
+	/*	Haste	*/	indP << "<c \"#CCFF00\">Haste: " << GetHaste() << "</c><br>" <<
+	/*	Haste2	*/	indP << " - Item: " << itembonuses.haste << " + Spell: " << (spellbonuses.haste + spellbonuses.hastetype2) << " (Cap: " << RuleI(Character, HasteCap) << ") | Over: " << (spellbonuses.hastetype3 + ExtraHaste) << "<br><br>" <<
+	/* RegenLbl	*/	indL << indS << "Regen<br>" << indS << indP << indP << " Base | Items (Cap) " << indP << " | Spell | A.A.s | Total<br>" <<
+	/*	Regen	*/	regen_string << "<br>" <<
+	/*	Stats	*/	stat_field << "<br><br>" <<
+	/*	Mod2s	*/	mod2_field << "<br>" <<
+	/*	HealAmt	*/	indP << "Heal Amount: " << GetHealAmt() << " / " << RuleI(Character, ItemHealAmtCap) << "<br>" <<
+	/*	SpellDmg*/	indP << "Spell Dmg: " << GetSpellDmg() << " / " << RuleI(Character, ItemSpellDmgCap) << "<br>" <<
+	/*	Clair	*/	indP << "Clairvoyance: " << GetClair() << " / " << RuleI(Character, ItemClairvoyanceCap) << "<br>" <<
+	/*	DSMit	*/	indP << "Dmg Shld Mit: " << GetDSMit() << " / " << RuleI(Character, ItemDSMitigationCap) << "<br><br>";
 	if(GetClass() == BARD)
-		final_stats += bard_info + "<br>";
+		final_string << bard_info << "<br>";
 	if(skill_mods.size() > 0)
-		final_stats += skill_mods + "<br>";
+		final_string << skill_mods << "<br>";
 	if(skill_dmgs.size() > 0)
-		final_stats += skill_dmgs + "<br>";
+		final_string << skill_dmgs << "<br>";
 	if(faction_item_string.size() > 0)
-		final_stats += faction_item_string;
+		final_string << faction_item_string;
 
+	std::string final_stats = final_string.str();
 
 	if(use_window) {
 		if(final_stats.size() < 4096)
@@ -6728,7 +6870,7 @@ void Client::SendAltCurrencies() {
 				altc->entries[i].stack_size = 1000;
 			}
 			i++;
-			iter++;
+			++iter;
 		}
 
 		FastQueuePacket(&outapp);
@@ -6745,6 +6887,11 @@ void Client::SetAlternateCurrencyValue(uint32 currency_id, uint32 new_amount)
 void Client::AddAlternateCurrencyValue(uint32 currency_id, int32 amount)
 {
 	if(amount == 0) {
+		return;
+	}
+
+	if(!alternate_currency_loaded) {
+		alternate_currency_queued_operations.push(std::make_pair(currency_id, amount));
 		return;
 	}
 
@@ -6771,7 +6918,7 @@ void Client::SendAlternateCurrencyValues()
 	std::list<AltCurrencyDefinition_Struct>::iterator iter = zone->AlternateCurrencies.begin();
 	while(iter != zone->AlternateCurrencies.end()) {
 		SendAlternateCurrencyValue((*iter).id, false);
-		iter++;
+		++iter;
 	}
 }
 
@@ -6797,6 +6944,16 @@ uint32 Client::GetAlternateCurrencyValue(uint32 currency_id) const
 		return 0;
 	} else {
 		return (*iter).second;
+	}
+}
+
+void Client::ProcessAlternateCurrencyQueue() {
+	while(!alternate_currency_queued_operations.empty()) {
+		std::pair<uint32, int32> op = alternate_currency_queued_operations.front();
+
+		AddAlternateCurrencyValue(op.first, op.second);
+
+		alternate_currency_queued_operations.pop();
 	}
 }
 
@@ -7200,7 +7357,7 @@ void Client::SendMercPersonalInfo()
 						mdus->MercData[i].Stances[stanceindex].StanceIndex = stanceindex;
 						mdus->MercData[i].Stances[stanceindex].Stance = (iter->StanceID);
 						stanceindex++;
-						iter++;
+						++iter;
 					}
 				}
 
@@ -7266,7 +7423,7 @@ void Client::SendMercPersonalInfo()
 						mml->Mercs[i].Stances[stanceindex].StanceIndex = stanceindex;
 						mml->Mercs[i].Stances[stanceindex].Stance = (iter->StanceID);
 						stanceindex++;
-						iter++;
+						++iter;
 					}
 				}
 				FastQueuePacket(&outapp);
@@ -7363,12 +7520,9 @@ FACTION_VALUE Client::GetReverseFactionCon(Mob* iOther) {
 //o--------------------------------------------------------------
 FACTION_VALUE Client::GetFactionLevel(uint32 char_id, uint32 npc_id, uint32 p_race, uint32 p_class, uint32 p_deity, int32 pFaction, Mob* tnpc)
 {
-	_ZP(Client_GetFactionLevel);
-
 	if (pFaction < 0)
 		return GetSpecialFactionCon(tnpc);
 	FACTION_VALUE fac = FACTION_INDIFFERENT;
-	//int32 pFacValue; -Trumpcard: commenting. Not currently used.
 	int32 tmpFactionValue;
 	FactionMods fmods;
 
@@ -7424,7 +7578,6 @@ FACTION_VALUE Client::GetFactionLevel(uint32 char_id, uint32 npc_id, uint32 p_ra
 //o--------------------------------------------------------------
 void Client::SetFactionLevel(uint32 char_id, uint32 npc_id, uint8 char_class, uint8 char_race, uint8 char_deity)
 {
-	_ZP(Client_SetFactionLevel);
 	int32 faction_id[MAX_NPC_FACTIONS]={ 0,0,0,0,0,0,0,0,0,0 };
 	int32 npc_value[MAX_NPC_FACTIONS]={ 0,0,0,0,0,0,0,0,0,0 };
 	uint8 temp[MAX_NPC_FACTIONS]={ 0,0,0,0,0,0,0,0,0,0 };
@@ -7505,10 +7658,7 @@ void Client::SetFactionLevel(uint32 char_id, uint32 npc_id, uint8 char_class, ui
 				if(tmpValue <= MIN_FACTION)
 					tmpValue = MIN_FACTION;
 
-				char* msg = BuildFactionMessage(npc_value[i],faction_id[i],tmpValue,temp[i]);
-				if (msg != 0)
-					Message(0, msg);
-				safe_delete_array(msg);
+				SendFactionMessage(npc_value[i], faction_id[i], tmpValue, temp[i]);
 			}
 		}
 	}
@@ -7517,7 +7667,6 @@ void Client::SetFactionLevel(uint32 char_id, uint32 npc_id, uint8 char_class, ui
 
 void Client::SetFactionLevel2(uint32 char_id, int32 faction_id, uint8 char_class, uint8 char_race, uint8 char_deity, int32 value, uint8 temp)
 {
-	_ZP(Client_SetFactionLevel2);
 	int32 current_value;
 	//Get the npc faction list
 	if(faction_id > 0 && value != 0) {
@@ -7526,11 +7675,7 @@ void Client::SetFactionLevel2(uint32 char_id, int32 faction_id, uint8 char_class
 		if(!(database.SetCharacterFactionLevel(char_id, faction_id, current_value, temp, factionvalues)))
 			return;
 
-		char* msg = BuildFactionMessage(value, faction_id, current_value, temp);
-		if (msg != 0)
-			Message(0, msg);
-		safe_delete(msg);
-
+		SendFactionMessage(value, faction_id, current_value, temp);
 	}
 	return;
 }
@@ -7562,7 +7707,6 @@ bool Client::HatedByClass(uint32 p_race, uint32 p_class, uint32 p_deity, int32 p
 {
 
 	bool Result = false;
-	_ZP(Client_GetFactionLevel);
 
 	int32 tmpFactionValue;
 	FactionMods fmods;
@@ -7585,52 +7729,30 @@ bool Client::HatedByClass(uint32 p_race, uint32 p_class, uint32 p_deity, int32 p
 }
 
 //o--------------------------------------------------------------
-//| Name: BuildFactionMessage; rembrant, Dec. 16, 2001
+//| Name: SendFactionMessage
 //o--------------------------------------------------------------
-//| Purpose: duh?
+//| Purpose: Send faction change message to client
 //o--------------------------------------------------------------
-char* Client::BuildFactionMessage(int32 tmpvalue, int32 faction_id, int32 totalvalue, uint8 temp)
+void Client::SendFactionMessage(int32 tmpvalue, int32 faction_id, int32 totalvalue, uint8 temp)
 {
-/*
-
-This should be replaced to send string-ID based messages using:
-#define FACTION_WORST 469 //Your faction standing with %1 could not possibly get any worse.
-#define FACTION_WORSE 470 //Your faction standing with %1 got worse.
-#define FACTION_BEST 471 //Your faction standing with %1 could not possibly get any better.
-#define FACTION_BETTER 472 //Your faction standing with %1 got better.
-
-some day.
-
-*/
-	//tmpvalue is the change as best I can tell.
-	char *faction_message = 0;
-
 	char name[50];
 
-	if(database.GetFactionName(faction_id, name, sizeof(name)) == false) {
+	// default to Faction# if we couldn't get the name from the ID
+	if (database.GetFactionName(faction_id, name, sizeof(name)) == false)
 		snprintf(name, sizeof(name),"Faction%i",faction_id);
-	}
 
-	if(tmpvalue == 0 || temp == 1 || temp == 2) {
-		return 0;
-	}
-	else if (totalvalue >= MAX_FACTION) {
-		MakeAnyLenString(&faction_message, "Your faction standing with %s could not possibly get any better!", name);
-		return faction_message;
-	}
-	else if(tmpvalue > 0 && totalvalue < MAX_FACTION) {
-		MakeAnyLenString(&faction_message, "Your faction standing with %s has gotten better!", name);
-		return faction_message;
-	}
-	else if(tmpvalue < 0 && totalvalue > MIN_FACTION) {
-		MakeAnyLenString(&faction_message, "Your faction standing with %s has gotten worse!", name);
-		return faction_message;
-	}
-	else if(totalvalue <= MIN_FACTION) {
-		MakeAnyLenString(&faction_message, "Your faction standing with %s could not possibly get any worse!", name);
-		return faction_message;
-	}
-	return 0;
+	if (tmpvalue == 0 || temp == 1 || temp == 2)
+		return;
+	else if (totalvalue >= MAX_FACTION)
+		Message_StringID(0, FACTION_BEST, name);
+	else if (tmpvalue > 0 && totalvalue < MAX_FACTION)
+		Message_StringID(0, FACTION_BETTER, name);
+	else if (tmpvalue < 0 && totalvalue > MIN_FACTION)
+		Message_StringID(0, FACTION_WORSE, name);
+	else if (totalvalue <= MIN_FACTION)
+		Message_StringID(0, FACTION_WORST, name);
+
+	return;
 }
 
 void Client::LoadAccountFlags()
@@ -7918,7 +8040,7 @@ bool Client::RemoveRespawnOption(std::string option_name)
 		opt = &(*itr);
 		if (opt->name.compare(option_name) == 0)
 		{
-			respawn_options.erase(itr); 
+			itr = respawn_options.erase(itr);
 			had = true;
 			//could be more with the same name, so keep going...
 		}
@@ -7954,4 +8076,134 @@ bool Client::RemoveRespawnOption(uint8 position)
 		}
 	}
 	return false;
+}
+
+void Client::SetHunger(int32 in_hunger)
+{
+	EQApplicationPacket *outapp;
+	outapp = new EQApplicationPacket(OP_Stamina, sizeof(Stamina_Struct));
+	Stamina_Struct* sta = (Stamina_Struct*)outapp->pBuffer;
+	sta->food = in_hunger;
+	sta->water = m_pp.thirst_level > 6000 ? 6000 : m_pp.thirst_level;
+
+	m_pp.hunger_level = in_hunger;
+
+	QueuePacket(outapp);
+	safe_delete(outapp);
+}
+
+void Client::SetThirst(int32 in_thirst)
+{
+	EQApplicationPacket *outapp;
+	outapp = new EQApplicationPacket(OP_Stamina, sizeof(Stamina_Struct));
+	Stamina_Struct* sta = (Stamina_Struct*)outapp->pBuffer;
+	sta->food = m_pp.hunger_level > 6000 ? 6000 : m_pp.hunger_level;
+	sta->water = in_thirst;
+
+	m_pp.thirst_level = in_thirst;
+
+	QueuePacket(outapp);
+	safe_delete(outapp);
+}
+
+void Client::SetConsumption(int32 in_hunger, int32 in_thirst)
+{
+	EQApplicationPacket *outapp;
+	outapp = new EQApplicationPacket(OP_Stamina, sizeof(Stamina_Struct));
+	Stamina_Struct* sta = (Stamina_Struct*)outapp->pBuffer;
+	sta->food = in_hunger;
+	sta->water = in_thirst;
+
+	m_pp.hunger_level = in_hunger;
+	m_pp.thirst_level = in_thirst;
+
+	QueuePacket(outapp);
+	safe_delete(outapp);
+}
+
+void Client::Consume(const Item_Struct *item, uint8 type, int16 slot, bool auto_consume)
+{
+   if(!item) { return; }
+
+    uint16 cons_mod = 180;
+
+    switch(GetAA(aaInnateMetabolism)){
+        case 1:
+            cons_mod = cons_mod * 110 * RuleI(Character, ConsumptionMultiplier) / 10000;
+            break;
+        case 2:
+            cons_mod = cons_mod * 125 * RuleI(Character, ConsumptionMultiplier) / 10000;
+            break;
+        case 3:
+            cons_mod = cons_mod * 150 * RuleI(Character, ConsumptionMultiplier) / 10000;
+            break;
+        default:
+            cons_mod = cons_mod * RuleI(Character, ConsumptionMultiplier) / 100;
+            break;
+    }
+
+   if(type == ItemTypeFood)
+   {
+       int hchange = item->CastTime * cons_mod;
+       hchange = mod_food_value(item, hchange);
+
+       if(hchange < 0) { return; }
+
+       m_pp.hunger_level += hchange;
+       DeleteItemInInventory(slot, 1, false);
+
+       if(!auto_consume) //no message if the client consumed for us
+           entity_list.MessageClose_StringID(this, true, 50, 0, EATING_MESSAGE, GetName(), item->Name);
+
+#if EQDEBUG >= 1
+       LogFile->write(EQEMuLog::Debug, "Eating from slot:%i", (int)slot);
+#endif
+   }
+   else
+   {
+       int tchange = item->CastTime * cons_mod;
+       tchange = mod_drink_value(item, tchange);
+
+       if(tchange < 0) { return; }
+
+        m_pp.thirst_level += tchange;
+        DeleteItemInInventory(slot, 1, false);
+
+        if(!auto_consume) //no message if the client consumed for us
+            entity_list.MessageClose_StringID(this, true, 50, 0, DRINKING_MESSAGE, GetName(), item->Name);
+
+#if EQDEBUG >= 1
+        LogFile->write(EQEMuLog::Debug, "Drinking from slot:%i", (int)slot);
+#endif
+   }
+}
+
+void Client::SendMarqueeMessage(uint32 type, uint32 priority, uint32 fade_in, uint32 fade_out, uint32 duration, std::string msg)
+{
+	if(duration == 0 || msg.length() == 0) {
+		return;
+	}
+
+	EQApplicationPacket outapp(OP_Marquee, sizeof(ClientMarqueeMessage_Struct) + msg.length());
+	ClientMarqueeMessage_Struct *cms = (ClientMarqueeMessage_Struct*)outapp.pBuffer;
+
+	cms->type = type;
+	cms->unk04 = 10;
+	cms->priority = priority;
+	cms->fade_in_time = fade_in;
+	cms->fade_out_time = fade_out;
+	cms->duration = duration;
+	strcpy(cms->msg, msg.c_str());
+
+	QueuePacket(&outapp);
+}
+
+void Client::PlayMP3(const char* fname)
+{
+	std::string filename = fname;
+	EQApplicationPacket *outapp = new EQApplicationPacket(OP_PlayMP3, filename.length() + 1);
+	PlayMP3_Struct* buf = (PlayMP3_Struct*)outapp->pBuffer;
+	strncpy(buf->filename, fname, filename.length());
+	QueuePacket(outapp);
+	safe_delete(outapp);
 }

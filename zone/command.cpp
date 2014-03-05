@@ -24,7 +24,7 @@
 	2.	Add the function in this file.
 	3.	In the command_init function you must add a call to command_add
 		for your function. If you want an alias for your command, add
-		a second call to command_add with the descriptin and access args
+		a second call to command_add with the description and access args
 		set to nullptr and 0 respectively since they aren't used when adding
 		an alias. The function pointers being equal is makes it an alias.
 		The access level you set with command_add is only a default if
@@ -220,6 +220,7 @@ int command_init(void) {
 		command_add("itemtest","- merth's test function",250,command_itemtest) ||
 		command_add("gassign","[id] - Assign targetted NPC to predefined wandering grid id",100,command_gassign) ||
 		command_add("ai","[factionid/spellslist/con/guard/roambox/stop/start] - Modify AI on NPC target",100,command_ai) ||
+		command_add("showspellslist","Shows spell list of targeted NPC",100,command_showspellslist) ||
 		command_add("worldshutdown","- Shut down world and all zones",200,command_worldshutdown) ||
 		command_add("sendzonespawns","- Refresh spawn list for all clients in zone",150,command_sendzonespawns) ||
 		command_add("dbspawn2","[spawngroup] [respawn] [variance] - Spawn an NPC from a predefined row in the spawn2 table",100,command_dbspawn2) ||
@@ -445,7 +446,10 @@ int command_init(void) {
 		command_add("xtargets", "Show your targets Extended Targets and optionally set how many xtargets they can have.", 250, command_xtargets) ||
 		command_add("zopp", "Troubleshooting command - Sends a fake item packet to you. No server reference is created.", 250, command_zopp) ||
 		command_add("augmentitem", "Force augments an item. Must have the augment item window open.", 250, command_augmentitem) ||
-		command_add("questerrors", "Shows quest errors.", 100, command_questerrors)
+		command_add("questerrors", "Shows quest errors.", 100, command_questerrors) ||
+		command_add("enablerecipe", "[recipe_id] - Enables a recipe using the recipe id.", 80, command_enablerecipe) ||
+		command_add("disablerecipe", "[recipe_id] - Disables a recipe using the recipe id.", 80, command_disablerecipe) ||
+		command_add("npctype_cache", "[id] or all - Clears the npc type cache for either the id or all npcs.", 250, command_npctype_cache)
 		)
 	{
 		command_deinit();
@@ -458,7 +462,7 @@ int command_init(void) {
 	std::map<std::string,uint8> command_settings;
 	std::map<std::string,uint8>::iterator itr;
 	database.GetCommandSettings(command_settings);
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		if ((itr=command_settings.find(cur->first))!=command_settings.end())
 		{
 			cur->second->access = itr->second;
@@ -523,7 +527,7 @@ int command_add(const char *command_string, const char *desc, int access, CmdFun
 	std::map<std::string, CommandRecord *>::iterator cur,end,del;
 	cur = commandlist.begin();
 	end = commandlist.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		if(cur->second->function == function) {
 			int r;
 			for(r = 1; r < CMDALIASES; r++) {
@@ -565,9 +569,6 @@ int command_add(const char *command_string, const char *desc, int access, CmdFun
  */
 int command_realdispatch(Client *c, const char *message)
 {
-	_ZP(command_realdispatch);
-
-
 	Seperator sep(message, ' ', 10, 100, true); // "three word argument" should be considered 1 arg
 
 	command_logcommand(c, message);
@@ -719,71 +720,6 @@ void command_sendop(Client *c,const Seperator *sep){
 	c->QueuePacket(outapp);
 	safe_delete(outapp);
 	return;
-
-	/*if(sep->arg[1][0] && sep->arg[2][0])
-	{
-		c->Message_StringID(atoi(sep->arg[1]),atoi(sep->arg[2]),sep->arg[3],sep->arg[4],sep->arg[5],sep->arg[6],sep->arg[7],sep->arg[8]);
-	}
-	else
-		c->Message(0,"type,string id, message1...");*/
-	/*
-		clientupdate lvl and such
-			uint32	level; //new level
-
-
-	*/
-
-
-	/*
-	if(sep->arg[1][0] && sep->arg[2][0]){
-		EQApplicationPacket* outapp = new EQApplicationPacket((EmuOpcode)atoi(sep->arg[1]),sizeof(GMName_Struct));
-		GMName_Struct* gms=(GMName_Struct*)outapp->pBuffer;
-		memset(outapp->pBuffer,0,outapp->size);
-		strcpy(gms->gmname,c->GetName());
-		strcpy(gms->oldname,c->GetName());
-		strcpy(gms->newname,sep->arg[3]);
-		if(sep->arg[4][0])
-			gms->badname=atoi(sep->arg[4]);
-		c->QueuePacket(outapp);
-		safe_delete(outapp);
-	}
-	*/
-	/*
-		else{
-			EQApplicationPacket* outapp = new EQApplicationPacket(121,atoi(sep->arg[2]));
-			memset(outapp->pBuffer,0,outapp->size);
-			uint8 offset=atoi(sep->arg[3]);
-			if(offset<outapp->size && sep->arg[4][0])
-				outapp->pBuffer[offset]=atoi(sep->arg[4]);
-			offset++;
-			if(offset<outapp->size && sep->arg[5][0])
-				outapp->pBuffer[offset+3]=atoi(sep->arg[5]);
-			offset++;
-			if(offset<outapp->size && sep->arg[6][0])
-				outapp->pBuffer[offset+3]=atoi(sep->arg[6]);
-			offset++;
-			if(offset<outapp->size && sep->arg[7][0])
-				outapp->pBuffer[offset]=atoi(sep->arg[7]);
-			offset++;
-			if(offset<outapp->size && sep->arg[8][0])
-				outapp->pBuffer[offset]=atoi(sep->arg[8]);
-			offset++;
-			if(offset<outapp->size && sep->arg[9][0])
-				outapp->pBuffer[offset]=atoi(sep->arg[9]);
-			c->QueuePacket(outapp);
-			safe_delete(outapp);
-		}*/
-		//c->SetStats(atoi(sep->arg[1]),atoi(sep->arg[2]));
-	//}
-		/*EQApplicationPacket* outapp = new EQApplicationPacket(atoi(sep->arg[1]), sizeof(PlayerAA_Struct));
-		memcpy(outapp->pBuffer,c->GetAAStruct(),outapp->size);
-		c->QueuePacket(outapp);
-		safe_delete(outapp);
-	}
-	else
-		c->Message(15,"Invalid opcode!");
-		*/
-
 }
 
 void command_optest(Client *c, const Seperator *sep)
@@ -824,6 +760,11 @@ void command_optest(Client *c, const Seperator *sep)
 				c->FastQueuePacket(&outapp);
 				break;
 			}
+			case 3:
+			{
+				c->SendMarqueeMessage(15, 250, 0, 500, 5000, "Some msg");
+				break;
+			}
 			default:
 			{
 				break;
@@ -842,7 +783,7 @@ void command_help(Client *c, const Seperator *sep)
 	cur = commandlist.begin();
 	end = commandlist.end();
 
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		if(sep->arg[1][0]) {
 			if(cur->first.find(sep->arg[1]) == std::string::npos) {
 				continue;
@@ -2144,21 +2085,27 @@ void command_ai(Client *c, const Seperator *sep)
 	}
 	else if (strcasecmp(sep->arg[1], "roambox") == 0) {
 		if (target && target->IsAIControlled() && target->IsNPC()) {
-			if ((sep->argnum == 6 || sep->argnum == 7) && sep->IsNumber(2) && sep->IsNumber(3) && sep->IsNumber(4) && sep->IsNumber(5) && sep->IsNumber(6)) {
+			if ((sep->argnum == 6 || sep->argnum == 7 || sep->argnum == 8) && sep->IsNumber(2) && sep->IsNumber(3) && sep->IsNumber(4) && sep->IsNumber(5) && sep->IsNumber(6)) {
 				uint32 tmp = 2500;
+				uint32 tmp2 = 2500;
 				if (sep->IsNumber(7))
 					tmp = atoi(sep->arg[7]);
-				target->CastToNPC()->AI_SetRoambox(atof(sep->arg[2]), atof(sep->arg[3]), atof(sep->arg[4]), atof(sep->arg[5]), atof(sep->arg[6]), tmp);
+				if (sep->IsNumber(8))
+					tmp2 = atoi(sep->arg[8]);
+				target->CastToNPC()->AI_SetRoambox(atof(sep->arg[2]), atof(sep->arg[3]), atof(sep->arg[4]), atof(sep->arg[5]), atof(sep->arg[6]), tmp, tmp2);
 			}
 			else if ((sep->argnum == 3 || sep->argnum == 4) && sep->IsNumber(2) && sep->IsNumber(3)) {
 				uint32 tmp = 2500;
+				uint32 tmp2 = 2500;
 				if (sep->IsNumber(4))
 					tmp = atoi(sep->arg[4]);
-				target->CastToNPC()->AI_SetRoambox(atof(sep->arg[2]), atof(sep->arg[3]), tmp);
+				if (sep->IsNumber(5))
+					tmp2 = atoi(sep->arg[5]);
+				target->CastToNPC()->AI_SetRoambox(atof(sep->arg[2]), atof(sep->arg[3]), tmp, tmp2);
 			}
 			else {
-				c->Message(0, "Usage: #ai roambox dist max_x min_x max_y min_y [delay]");
-				c->Message(0, "Usage: #ai roambox dist roamdist [delay]");
+				c->Message(0, "Usage: #ai roambox dist max_x min_x max_y min_y [delay] [mindelay]");
+				c->Message(0, "Usage: #ai roambox dist roamdist [delay] [mindelay]");
 			}
 		}
 		else
@@ -2465,7 +2412,7 @@ void command_showskills(Client *c, const Seperator *sep)
 		t=c->GetTarget()->CastToClient();
 
 	c->Message(0, "Skills for %s", t->GetName());
-	for (SkillType i=_1H_BLUNT; i <= HIGHEST_SKILL; i=(SkillType)(i+1))
+	for (SkillUseTypes i=Skill1HBlunt; i <= HIGHEST_SKILL; i=(SkillUseTypes)(i+1))
 		c->Message(0, "Skill [%d] is at [%d]", i, t->GetSkill(i));
 }
 
@@ -2626,7 +2573,7 @@ void command_setskill(Client *c, const Seperator *sep)
 		int skill_num = atoi(sep->arg[1]);
 		uint16 skill_value = atoi(sep->arg[2]);
 		if(skill_num < HIGHEST_SKILL)
-			c->GetTarget()->CastToClient()->SetSkill((SkillType)skill_num, skill_value);
+			c->GetTarget()->CastToClient()->SetSkill((SkillUseTypes)skill_num, skill_value);
 	}
 }
 
@@ -2644,7 +2591,7 @@ void command_setskillall(Client *c, const Seperator *sep)
 		if (c->Admin() >= commandSetSkillsOther || c->GetTarget()==c || c->GetTarget()==0) {
 			LogFile->write(EQEMuLog::Normal,"Set ALL skill request from %s, target:%s", c->GetName(), c->GetTarget()->GetName());
 			uint16 level = atoi(sep->arg[1]);
-			for(SkillType skill_num=_1H_BLUNT;skill_num <= HIGHEST_SKILL;skill_num=(SkillType)(skill_num+1)) {
+			for(SkillUseTypes skill_num=Skill1HBlunt;skill_num <= HIGHEST_SKILL;skill_num=(SkillUseTypes)(skill_num+1)) {
 				c->GetTarget()->CastToClient()->SetSkill(skill_num, level);
 			}
 		}
@@ -3021,7 +2968,7 @@ void command_peekinv(Client *c, const Seperator *sep)
 			}
 		}
 		else {
-			for(it=client->GetInv().cursor_begin();it!=client->GetInv().cursor_end();it++,i++) {
+			for(it=client->GetInv().cursor_begin();it!=client->GetInv().cursor_end();++it,i++) {
 				const ItemInst* inst = *it;
 				item = (inst) ? inst->GetItem() : nullptr;
 				if (c->GetClientVersion() >= EQClientSoF)
@@ -4589,7 +4536,7 @@ void command_damage(Client *c, const Seperator *sep)
 		if (nkdmg > 2100000000)
 			c->Message(0, "Enter a value less then 2,100,000,000.");
 		else
-			c->GetTarget()->Damage(c, nkdmg, SPELL_UNKNOWN, HAND_TO_HAND, false);
+			c->GetTarget()->Damage(c, nkdmg, SPELL_UNKNOWN, SkillHandtoHand, false);
 	}
 }
 
@@ -5305,7 +5252,7 @@ void command_manaburn(Client *c, const Seperator *sep)
 					int nukedmg=(c->GetMana())*2;
 					if (nukedmg>0)
 					{
-						target->Damage(c, nukedmg, 2751, ABJURE/*hackish*/);
+						target->Damage(c, nukedmg, 2751, SkillAbjuration/*hackish*/);
 						c->Message(4,"You unleash an enormous blast of magical energies.");
 					}
 					LogFile->write(EQEMuLog::Normal,"Manaburn request from %s, damage: %d", c->GetName(), nukedmg);
@@ -6365,7 +6312,7 @@ void command_ban(Client *c, const Seperator *sep)
 			client = entity_list.GetClientByName(sep->arg[1]);
 			if(client)
 			{
-				client->Kick();
+				client->WorldKick();
 			}
 			else
 			{
@@ -6427,7 +6374,7 @@ void command_suspend(Client *c, const Seperator *sep)
 			Client *BannedClient = entity_list.GetClientByName(sep->arg[1]);
 
 			if(BannedClient)
-				BannedClient->Kick();
+				BannedClient->WorldKick();
 			else
 			{
 				ServerPacket* pack = new ServerPacket(ServerOP_KickPlayer, sizeof(ServerKickPlayer_Struct));
@@ -6648,6 +6595,7 @@ void command_npcedit(Client *c, const Seperator *sep)
 		c->Message(0, "#npcedit Mindmg - Sets an NPCs minimum damage");
 		c->Message(0, "#npcedit Maxdmg - Sets an NPCs maximum damage");
 		c->Message(0, "#npcedit Aggroradius - Sets an NPCs aggro radius");
+		c->Message(0, "#npcedit Assistradius - Sets an NPCs assist radius");
 		c->Message(0, "#npcedit Social - Set to 1 if an NPC should assist others on its faction");
 		c->Message(0, "#npcedit Runspeed - Sets an NPCs run speed");
 		c->Message(0, "#npcedit MR - Sets an NPCs magic resistance");
@@ -6854,6 +6802,15 @@ void command_npcedit(Client *c, const Seperator *sep)
 		c->LogSQL(query);
 		safe_delete_array(query);
 	}
+	else if ( strcasecmp( sep->arg[1], "assistradius" ) == 0 )
+	{
+		char errbuf[MYSQL_ERRMSG_SIZE];
+		char *query = 0;
+		c->Message(15,"NPCID %u now has an assist radius of %i",c->GetTarget()->CastToNPC()->GetNPCTypeID(),atoi(sep->arg[2]));
+		database.RunQuery(query, MakeAnyLenString(&query, "update npc_types set assistradius=%i where id=%i",atoi(sep->argplus[2]),c->GetTarget()->CastToNPC()->GetNPCTypeID()), errbuf);
+		c->LogSQL(query);
+		safe_delete_array(query);
+	}
 	else if ( strcasecmp( sep->arg[1], "social" ) == 0 )
 	{
 		char errbuf[MYSQL_ERRMSG_SIZE];
@@ -6984,8 +6941,8 @@ void command_npcedit(Client *c, const Seperator *sep)
 	{
 		char errbuf[MYSQL_ERRMSG_SIZE];
 		char *query = 0;
-		c->Message(15,"Quest globals have been %d for NPCID %u",c->GetTarget()->CastToNPC()->GetNPCTypeID(),atoi(sep->arg[2])==0?"disabled":"enabled");
-		database.RunQuery(query, MakeAnyLenString(&query, "update npc_types set qglobal=%i where id=%i",atoi(sep->argplus[2])==0?0:1,c->GetTarget()->CastToNPC()->GetNPCTypeID()), errbuf);
+		c->Message(15, "Quest globals have been %s for NPCID %u", atoi(sep->arg[2]) == 0 ? "disabled" : "enabled", c->GetTarget()->CastToNPC()->GetNPCTypeID());
+		database.RunQuery(query, MakeAnyLenString(&query, "UPDATE npc_types SET qglobal=%i WHERE id=%i", atoi(sep->argplus[2]) == 0 ? 0 : 1, c->GetTarget()->CastToNPC()->GetNPCTypeID()), errbuf);
 		c->LogSQL(query);
 		safe_delete_array(query);
 	}
@@ -8349,7 +8306,7 @@ void command_rules(Client *c, const Seperator *sep) {
 		std::map<int, std::string>::iterator cur, end;
 		cur = sets.begin();
 		end = sets.end();
-		for(; cur != end; cur++) {
+		for(; cur != end; ++cur) {
 			c->Message(0, "(%d) %s", cur->first, cur->second.c_str());
 		}
 	} else if(!strcasecmp(sep->arg[1], "reload")) {
@@ -8448,7 +8405,7 @@ void command_rules(Client *c, const Seperator *sep) {
 			std::vector<const char *>::iterator cur, end;
 			cur = rule_list.begin();
 			end = rule_list.end();
-			for(; cur != end; cur++) {
+			for(; cur != end; ++cur) {
 				c->Message(0, " %s", *cur);
 			}
 		} else if(sep->argnum == 2) {
@@ -8464,7 +8421,7 @@ void command_rules(Client *c, const Seperator *sep) {
 			std::vector<const char *>::iterator cur, end;
 			cur = rule_list.begin();
 			end = rule_list.end();
-			for(; cur != end; cur++) {
+			for(; cur != end; ++cur) {
 				c->Message(0, " %s", *cur);
 			}
 		} else {
@@ -8487,7 +8444,7 @@ void command_rules(Client *c, const Seperator *sep) {
 			std::vector<const char *>::iterator cur, end;
 			cur = rule_list.begin();
 			end = rule_list.end();
-			for(std::string tmp_value; cur != end; cur++) {
+			for(std::string tmp_value; cur != end; ++cur) {
 				if (RuleManager::Instance()->GetRule(*cur, tmp_value))
 					c->Message(0, " %s - %s", *cur, tmp_value.c_str());
 			}
@@ -10763,6 +10720,25 @@ void command_object(Client *c, const Seperator *sep)
 	}
 }
 
+void command_showspellslist(Client *c, const Seperator *sep)
+{
+	Mob *target = c->GetTarget();
+
+	if (!target) {
+		c->Message(0, "Must target an NPC.");
+		return;
+	}
+
+	if (!target->IsNPC()) {
+		c->Message(0, "%s is not an NPC.", target->GetName());
+		return;
+	}
+
+	target->CastToNPC()->AISpellsList(c);
+
+	return;
+}
+
 // All new code added to command.cpp ought to be BEFORE this comment line. Do no append code to this file below the BOTS code block.
 #ifdef BOTS
 // Function delegate to support the command interface for Bots with the client.
@@ -11045,14 +11021,14 @@ void command_max_all_skills(Client *c, const Seperator *sep)
 	{
 		for(int i = 0; i <= HIGHEST_SKILL; ++i)
 		{
-			if(i >= SPECIALIZE_ABJURE && i <= SPECIALIZE_EVOCATION)
+			if(i >= SkillSpecializeAbjure && i <= SkillSpecializeEvocation)
 			{
-				c->SetSkill((SkillType)i, 50);
+				c->SetSkill((SkillUseTypes)i, 50);
 			}
 			else
 			{
-				int max_skill_level = database.GetSkillCap(c->GetClass(), (SkillType)i, c->GetLevel());
-				c->SetSkill((SkillType)i, max_skill_level);
+				int max_skill_level = database.GetSkillCap(c->GetClass(), (SkillUseTypes)i, c->GetLevel());
+				c->SetSkill((SkillUseTypes)i, max_skill_level);
 			}
 		}
 	}
@@ -11077,9 +11053,6 @@ void command_showbonusstats(Client *c, const Seperator *sep)
 			c->Message(0, "  Target Spell Bonuses:");
 			c->Message(0, "  Accuracy: %i%%   Divine Save: %i%%",c->GetTarget()->GetSpellBonuses().Accuracy, c->GetTarget()->GetSpellBonuses().DivineSaveChance);
 			c->Message(0, "  Flurry: %i%%     HitChance: %i%% ",c->GetTarget()->GetSpellBonuses().FlurryChance, c->GetTarget()->GetSpellBonuses().HitChance / 15);
-			int deathsaveslot = c->GetTarget()->GetBuffSlotFromType(SE_DeathSave);
-			int dschance = deathsaveslot >= 0 ? c->GetTarget()->GetBuffs()[deathsaveslot].deathSaveSuccessChance : 0;
-			c->Message(0, "  Death Save: %i%%",dschance);
 		}
 		c->Message(0, "  Effective Casting Level: %i",c->GetTarget()->GetCasterLevel(0));
 	}
@@ -11142,14 +11115,14 @@ void command_disarmtrap(Client *c, const Seperator *sep)
 
 	if(target->IsNPC())
 	{
-		if(c->HasSkill(DISARM_TRAPS))
+		if(c->HasSkill(SkillDisarmTraps))
 		{
 			if(c->DistNoRootNoZ(*target) > RuleI(Adventure, LDoNTrapDistanceUse))
 			{
 				c->Message(13, "%s is too far away.", target->GetCleanName());
 				return;
 			}
-			c->HandleLDoNDisarm(target->CastToNPC(), c->GetSkill(DISARM_TRAPS), LDoNTypeMechanical);
+			c->HandleLDoNDisarm(target->CastToNPC(), c->GetSkill(SkillDisarmTraps), LDoNTypeMechanical);
 		}
 		else
 			c->Message(13, "You do not have the disarm trap skill.");
@@ -11167,14 +11140,14 @@ void command_sensetrap(Client *c, const Seperator *sep)
 
 	if(target->IsNPC())
 	{
-		if(c->HasSkill(SENSE_TRAPS))
+		if(c->HasSkill(SkillSenseTraps))
 		{
 			if(c->DistNoRootNoZ(*target) > RuleI(Adventure, LDoNTrapDistanceUse))
 			{
 				c->Message(13, "%s is too far away.", target->GetCleanName());
 				return;
 			}
-			c->HandleLDoNSenseTraps(target->CastToNPC(), c->GetSkill(SENSE_TRAPS), LDoNTypeMechanical);
+			c->HandleLDoNSenseTraps(target->CastToNPC(), c->GetSkill(SkillSenseTraps), LDoNTypeMechanical);
 		}
 		else
 			c->Message(13, "You do not have the sense traps skill.");
@@ -11192,14 +11165,14 @@ void command_picklock(Client *c, const Seperator *sep)
 
 	if(target->IsNPC())
 	{
-		if(c->HasSkill(PICK_LOCK))
+		if(c->HasSkill(SkillPickLock))
 		{
 			if(c->DistNoRootNoZ(*target) > RuleI(Adventure, LDoNTrapDistanceUse))
 			{
 				c->Message(13, "%s is too far away.", target->GetCleanName());
 				return;
 			}
-			c->HandleLDoNPickLock(target->CastToNPC(), c->GetSkill(PICK_LOCK), LDoNTypeMechanical);
+			c->HandleLDoNPickLock(target->CastToNPC(), c->GetSkill(SkillPickLock), LDoNTypeMechanical);
 		}
 		else
 			c->Message(13, "You do not have the pick locks skill.");
@@ -11427,5 +11400,84 @@ void command_questerrors(Client *c, const Seperator *sep)
 		c->Message(0, iter->c_str());
 		++i;
 		++iter;
+	}
+}
+
+void command_enablerecipe(Client *c, const Seperator *sep)
+{
+	uint32 recipe_id = 0;
+	bool success = false;
+	if (c) {
+		if (sep->argnum == 1) {
+			recipe_id = atoi(sep->arg[1]);
+		}
+		else {
+			c->Message(0, "Invalid number of arguments.\nUsage: #enablerecipe recipe_id");
+			return;
+		}
+		if (recipe_id > 0) {
+			success = database.EnableRecipe(recipe_id);
+			if (success) {
+				c->Message(0, "Recipe enabled.");
+			}
+			else {
+				c->Message(0, "Recipe not enabled.");
+			}
+		}
+		else {
+			c->Message(0, "Invalid recipe id.\nUsage: #enablerecipe recipe_id");
+		}
+	}
+}
+
+void command_disablerecipe(Client *c, const Seperator *sep)
+{
+	uint32 recipe_id = 0;
+	bool success = false;
+	if (c) {
+		if (sep->argnum == 1) {
+			recipe_id = atoi(sep->arg[1]);
+		}
+		else {
+			c->Message(0, "Invalid number of arguments.\nUsage: #disablerecipe recipe_id");
+			return;
+		}
+		if (recipe_id > 0) {
+			success = database.DisableRecipe(recipe_id);
+			if (success) {
+				c->Message(0, "Recipe disabled.");
+			}
+			else {
+				c->Message(0, "Recipe not disabled.");
+			}
+		}
+		else {
+			c->Message(0, "Invalid recipe id.\nUsage: #disablerecipe recipe_id");
+		}
+	}
+}
+
+void command_npctype_cache(Client *c, const Seperator *sep)
+{
+	if (sep->argnum > 0) {
+		for (int i = 0; i < sep->argnum; ++i) {
+			if (strcasecmp(sep->arg[i + 1], "all") == 0) {
+				c->Message(0, "Clearing all npc types from the cache.");
+				zone->ClearNPCTypeCache(-1);
+			}
+			else {
+				int id = atoi(sep->arg[i + 1]);
+				if (id > 0) {
+					c->Message(0, "Clearing npc type %d from the cache.", id);
+					zone->ClearNPCTypeCache(id);
+					return;
+				}
+			}
+		}
+	}
+	else {
+		c->Message(0, "Usage:");
+		c->Message(0, "#npctype_cache [npctype_id] ...");
+		c->Message(0, "#npctype_cache all");
 	}
 }

@@ -71,8 +71,6 @@ extern PetitionList petition_list;
 extern EntityList entity_list;
 
 bool Client::Process() {
-	_ZP(Client_Process);
-	adverrorinfo = 1;
 	bool ret = true;
 
 	if(Connected() || IsLD())
@@ -273,14 +271,14 @@ bool Client::Process() {
 			Things which prevent us from attacking:
 				- being under AI control, the AI does attacks
 				- being dead
-				- casting a spell (not sure what the rest is doing, prolly bard)
+				- casting a spell and bard check
 				- not having a target
 				- being stunned or mezzed
 				- having used a ranged weapon recently
 		*/
 		if(auto_attack) {
 			if(!IsAIControlled() && !dead
-				&& !(spellend_timer.Enabled() && (spells[casting_spell_id].classes[7] < 1 && spells[casting_spell_id].classes[7] > 65))
+				&& !(spellend_timer.Enabled() && casting_spell_id && !IsBardSong(casting_spell_id))
 				&& !IsStunned() && !IsFeared() && !IsMezzed() && GetAppearance() != eaDead && !IsMeleeDisabled()
 				)
 				may_use_attacks = true;
@@ -301,10 +299,12 @@ bool Client::Process() {
 				if(ranged->GetItem() && ranged->GetItem()->ItemType == ItemTypeBow){
 					if(ranged_timer.Check(false)){
 						if(GetTarget() && (GetTarget()->IsNPC() || GetTarget()->IsClient())){
-							if(!GetTarget()->BehindMob(this, GetTarget()->GetX(), GetTarget()->GetY())){
+							if(GetTarget()->InFrontMob(this, GetTarget()->GetX(), GetTarget()->GetY())){
 								if(CheckLosFN(GetTarget())){
 									//client has built in los check, but auto fire does not.. done last.
 									RangedAttack(GetTarget());
+										if (CheckDoubleRangedAttack())
+											RangedAttack(GetTarget(), true);
 								}
 								else
 									ranged_timer.Start();
@@ -316,10 +316,10 @@ bool Client::Process() {
 							ranged_timer.Start();
 					}
 				}
-				else if(ranged->GetItem() && (ranged->GetItem()->ItemType == ItemTypeThrowing || ranged->GetItem()->ItemType == ItemTypeThrowingv2)){
+				else if(ranged->GetItem() && (ranged->GetItem()->ItemType == ItemTypeLargeThrowing || ranged->GetItem()->ItemType == ItemTypeSmallThrowing)){
 					if(ranged_timer.Check(false)){
 						if(GetTarget() && (GetTarget()->IsNPC() || GetTarget()->IsClient())){
-							if(!GetTarget()->BehindMob(this, GetTarget()->GetX(), GetTarget()->GetY())){
+							if(GetTarget()->InFrontMob(this, GetTarget()->GetX(), GetTarget()->GetY())){
 								if(CheckLosFN(GetTarget())){
 									//client has built in los check, but auto fire does not.. done last.
 									ThrowingAttack(GetTarget());
@@ -359,10 +359,15 @@ bool Client::Process() {
 					aa_los_them.x = aa_los_them_mob->GetX();
 					aa_los_them.y = aa_los_them_mob->GetY();
 					aa_los_them.z = aa_los_them_mob->GetZ();
-					if(CheckLosFN(auto_attack_target))
-						los_status = true;
-					else
-						los_status = false;
+					los_status = CheckLosFN(auto_attack_target);
+					aa_los_me_heading = GetHeading();
+					los_status_facing = aa_los_them_mob->InFrontMob(this, aa_los_them.x, aa_los_them.y);
+				}
+				// If only our heading changes, we can skip the CheckLosFN call
+				// but above we still need to update los_status_facing
+				if (aa_los_me_heading != GetHeading()) {
+					aa_los_me_heading = GetHeading();
+					los_status_facing = aa_los_them_mob->InFrontMob(this, aa_los_them.x, aa_los_them.y);
 				}
 			}
 			else
@@ -371,25 +376,23 @@ bool Client::Process() {
 				aa_los_me.x = GetX();
 				aa_los_me.y = GetY();
 				aa_los_me.z = GetZ();
+				aa_los_me_heading = GetHeading();
 				aa_los_them.x = aa_los_them_mob->GetX();
 				aa_los_them.y = aa_los_them_mob->GetY();
 				aa_los_them.z = aa_los_them_mob->GetZ();
-				if(CheckLosFN(auto_attack_target))
-					los_status = true;
-				else
-					los_status = false;
+				los_status = CheckLosFN(auto_attack_target);
+				los_status_facing = aa_los_them_mob->InFrontMob(this, aa_los_them.x, aa_los_them.y);
 			}
 
 			if (!CombatRange(auto_attack_target))
 			{
-				//duplicate message not wanting to see it.
-				//Message_StringID(MT_TooFarAway,TARGET_TOO_FAR);
+				Message_StringID(MT_TooFarAway,TARGET_TOO_FAR);
 			}
 			else if (auto_attack_target == this)
 			{
 				Message_StringID(MT_TooFarAway,TRY_ATTACKING_SOMEONE);
 			}
-			else if (!los_status)
+			else if (!los_status || !los_status_facing)
 			{
 				//you can't see your target
 			}
@@ -407,7 +410,7 @@ bool Client::Process() {
 				bool tripleAttackSuccess = false;
 				if( auto_attack_target && CanThisClassDoubleAttack() ) {
 
-					CheckIncreaseSkill(DOUBLE_ATTACK, auto_attack_target, -10);
+					CheckIncreaseSkill(SkillDoubleAttack, auto_attack_target, -10);
 					if(CheckDoubleAttack()) {
 						//should we allow rampage on double attack?
 						if(CheckAAEffect(aaEffectRampage)) {
@@ -438,9 +441,9 @@ bool Client::Process() {
 
 				if (auto_attack_target && flurrychance)
 				{
-					if(MakeRandomInt(0, 100) < flurrychance)
+					if(MakeRandomInt(0, 99) < flurrychance)
 					{
-						Message_StringID(MT_NPCFlurry, 128);
+						Message_StringID(MT_NPCFlurry, YOU_FLURRY);
 						Attack(auto_attack_target, 13, false);
 						Attack(auto_attack_target, 13, false);
 					}
@@ -451,11 +454,11 @@ bool Client::Process() {
 				if (auto_attack_target && ExtraAttackChanceBonus) {
 					ItemInst *wpn = GetInv().GetItem(SLOT_PRIMARY);
 					if(wpn){
-						if(wpn->GetItem()->ItemType == ItemType2HS ||
-							wpn->GetItem()->ItemType == ItemType2HB ||
-							wpn->GetItem()->ItemType == ItemType2HPierce )
+						if(wpn->GetItem()->ItemType == ItemType2HSlash ||
+							wpn->GetItem()->ItemType == ItemType2HBlunt ||
+							wpn->GetItem()->ItemType == ItemType2HPiercing )
 						{
-							if(MakeRandomInt(0, 100) < ExtraAttackChanceBonus)
+							if(MakeRandomInt(0, 99) < ExtraAttackChanceBonus)
 							{
 								Attack(auto_attack_target, 13, false);
 							}
@@ -466,13 +469,13 @@ bool Client::Process() {
 		}
 
 		if (GetClass() == WARRIOR || GetClass() == BERSERKER) {
-			if(!dead && !berserk && this->GetHPRatio() < 30) {
+			if (!dead && !IsBerserk() && GetHPRatio() < RuleI(Combat, BerserkerFrenzyStart)) {
 				entity_list.MessageClose_StringID(this, false, 200, 0, BERSERK_START, GetName());
-				this->berserk = true;
+				berserk = true;
 			}
-			if (berserk && this->GetHPRatio() > 30) {
+			if (IsBerserk() && GetHPRatio() > RuleI(Combat, BerserkerFrenzyEnd)) {
 				entity_list.MessageClose_StringID(this, false, 200, 0, BERSERK_END, GetName());
-				this->berserk = false;
+				berserk = false;
 			}
 		}
 
@@ -482,13 +485,13 @@ bool Client::Process() {
 			// Range check
 			if(!CombatRange(auto_attack_target)) {
 				// this is a duplicate message don't use it.
-				Message_StringID(MT_TooFarAway,TARGET_TOO_FAR);
+				//Message_StringID(MT_TooFarAway,TARGET_TOO_FAR);
 			}
 			// Don't attack yourself
 			else if(auto_attack_target == this) {
-				Message_StringID(MT_TooFarAway,TRY_ATTACKING_SOMEONE);
+				//Message_StringID(MT_TooFarAway,TRY_ATTACKING_SOMEONE);
 			}
-			else if (!los_status)
+			else if (!los_status || !los_status_facing)
 			{
 				//you can't see your target
 			}
@@ -496,12 +499,12 @@ bool Client::Process() {
 				float DualWieldProbability = 0.0f;
 
 				int16 Ambidexterity = aabonuses.Ambidexterity + spellbonuses.Ambidexterity + itembonuses.Ambidexterity;
-				DualWieldProbability = (GetSkill(DUAL_WIELD) + GetLevel() + Ambidexterity) / 400.0f; // 78.0 max
+				DualWieldProbability = (GetSkill(SkillDualWield) + GetLevel() + Ambidexterity) / 400.0f; // 78.0 max
 				int16 DWBonus = spellbonuses.DualWieldChance + itembonuses.DualWieldChance;
 				DualWieldProbability += DualWieldProbability*float(DWBonus)/ 100.0f;
 
 				float random = MakeRandomFloat(0, 1);
-				CheckIncreaseSkill(DUAL_WIELD, auto_attack_target, -10);
+				CheckIncreaseSkill(SkillDualWield, auto_attack_target, -10);
 				if (random < DualWieldProbability){ // Max 78% of DW
 					if(CheckAAEffect(aaEffectRampage)) {
 						entity_list.AEAttack(this, 30, 14);
@@ -523,7 +526,6 @@ bool Client::Process() {
 			}
 		}
 
-		adverrorinfo = 2;
 		if (position_timer.Check()) {
 			if (IsAIControlled())
 			{
@@ -579,7 +581,8 @@ bool Client::Process() {
 			{
 				if (!CombatRange(shield_target))
 				{
-					entity_list.MessageClose(this,false,100,0,"%s ceases shielding %s.",GetCleanName(),shield_target->GetCleanName());
+					entity_list.MessageClose_StringID(this, false, 100, 0,
+						END_SHIELDING, GetCleanName(), shield_target->GetCleanName());
 					for (int y = 0; y < 2; y++)
 					{
 						if (shield_target->shielder[y].shielder_id == GetID())
@@ -599,9 +602,7 @@ bool Client::Process() {
 			}
 		}
 
-		adverrorinfo = 3;
 		SpellProcess();
-		adverrorinfo = 4;
 		if (endupkeep_timer.Check() && !dead){
 			DoEnduranceUpkeep();
 		}
@@ -690,8 +691,6 @@ bool Client::Process() {
 
 
 	/************ Get all packets from packet manager out queue and process them ************/
-	adverrorinfo = 5;
-
 	EQApplicationPacket *app = nullptr;
 	if(!eqs->CheckState(CLOSING))
 	{
@@ -721,24 +720,21 @@ bool Client::Process() {
 		{
 			GetMerc()->Depop();
 		}
-		adverrorinfo = 811;
+
 		client_state = CLIENT_LINKDEAD;
-		if (/*!loggedin || */zoning || instalog || GetGM())
+		if (zoning || instalog || GetGM())
 		{
-			adverrorinfo = 811;
 			Group *mygroup = GetGroup();
 			if (mygroup)
 			{
-				adverrorinfo = 812;
 				if (!zoning) {
-					entity_list.MessageGroup(this,true,15,"%s logged out.",GetName());
+					entity_list.MessageGroup(this, true, 15, "%s logged out.", GetName());
 					mygroup->DelMember(this);
 				} else {
-					entity_list.MessageGroup(this,true,15,"%s left the zone.",GetName());
+					entity_list.MessageGroup(this, true, 15, "%s left the zone.", GetName());
 					mygroup->MemberZoned(this);
 				}
 
-				adverrorinfo = 813;
 			}
 			Raid *myraid = entity_list.GetRaidByClient(this);
 			if (myraid)
@@ -757,7 +753,6 @@ bool Client::Process() {
 		}
 		else
 		{
-			adverrorinfo = 814;
 			LinkDead();
 		}
 		OnDisconnect(true);
@@ -766,7 +761,7 @@ bool Client::Process() {
 	if (forget_timer.Check()) {
 		forget_timer.Disable();
 		entity_list.ClearZoneFeignAggro(this);
-		Message(0,"Your enemies have forgotten you!");
+		Message(0, "Your enemies have forgotten you!");
 	}
 
 	return ret;
@@ -910,7 +905,7 @@ void Client::BulkSendInventoryItems() {
 
 	EQApplicationPacket* outapp = new EQApplicationPacket(OP_CharInventory, size);
 	uchar* ptr = outapp->pBuffer;
-	for(itr = ser_items.begin(); itr != ser_items.end(); itr++){
+	for(itr = ser_items.begin(); itr != ser_items.end(); ++itr){
 		int length = itr->second.length();
 		if(length > 5) {
 			memcpy(ptr, itr->second.c_str(), length);
@@ -984,11 +979,14 @@ void Client::BulkSendMerchantInventory(int merchant_id, int npcid) {
 
 	uint32 i=1;
 	uint8 handychance = 0;
-	for(itr = merlist.begin();itr != merlist.end() && i<numItemSlots;itr++){
+	for (itr = merlist.begin(); itr != merlist.end() && i < numItemSlots; ++itr) {
 		MerchantList ml = *itr;
 		if(GetLevel() < ml.level_required) {
 			continue;
 		}
+
+		if (!(ml.classes_required & (1 << (GetClass() - 1))))
+			continue;
 
 		int32 fac = merch ? merch->GetPrimaryFaction() : 0;
 		if(fac != 0 && GetModCharacterFactionLevel(fac) < ml.faction_required) {
@@ -1030,7 +1028,7 @@ void Client::BulkSendMerchantInventory(int merchant_id, int npcid) {
 	}
 	std::list<TempMerchantList> origtmp_merlist = zone->tmpmerchanttable[npcid];
 	tmp_merlist.clear();
-	for(tmp_itr = origtmp_merlist.begin();tmp_itr != origtmp_merlist.end() && i<numItemSlots;tmp_itr++){
+	for(tmp_itr = origtmp_merlist.begin();tmp_itr != origtmp_merlist.end() && i<numItemSlots;++tmp_itr){
 		TempMerchantList ml = *tmp_itr;
 		item=database.GetItem(ml.item);
 		ml.slot=i;
@@ -1142,7 +1140,7 @@ void Client::OPRezzAnswer(uint32 Action, uint32 SpellID, uint16 ZoneID, uint16 I
 				this->name, (uint16)spells[SpellID].base[0],
 				SpellID, ZoneID, InstanceID);
 
-		this->BuffFadeAll();
+		this->BuffFadeNonPersistDeath();
 		int SpellEffectDescNum = GetSpellEffectDescNum(SpellID);
 		// Rez spells with Rez effects have this DescNum (first is Titanium, second is 6.2 Client)
 		if((SpellEffectDescNum == 82) || (SpellEffectDescNum == 39067)) {
@@ -1600,9 +1598,9 @@ void Client::OPGMTraining(const EQApplicationPacket *app)
 	if(DistNoRoot(*pTrainer) > USE_NPC_RANGE2)
 		return;
 
-	SkillType sk;
-	for (sk = _1H_BLUNT; sk <= HIGHEST_SKILL; sk = (SkillType)(sk+1)) {
-		if(sk == TINKERING && GetRace() != GNOME) {
+	SkillUseTypes sk;
+	for (sk = Skill1HBlunt; sk <= HIGHEST_SKILL; sk = (SkillUseTypes)(sk+1)) {
+		if(sk == SkillTinkering && GetRace() != GNOME) {
 			gmtrain->skills[sk] = 0; //Non gnomes can't tinker!
 		} else {
 			gmtrain->skills[sk] = GetMaxSkillAfterSpecializationRules(sk, MaxSkill(sk, GetClass(), RuleI(Character, MaxLevel)));
@@ -1699,10 +1697,15 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 			return;
 		}
 
-		SkillType skill = (SkillType) gmskill->skill_id;
+		SkillUseTypes skill = (SkillUseTypes) gmskill->skill_id;
 
 		if(!CanHaveSkill(skill)) {
 			mlog(CLIENT__ERROR, "Tried to train skill %d, which is not allowed.", skill);
+			return;
+		}
+
+		if(MaxSkill(skill) == 0) {
+			mlog(CLIENT__ERROR, "Tried to train skill %d, but training is not allowed at this level.", skill);
 			return;
 		}
 
@@ -1714,30 +1717,31 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 			{
 				return;
 			}
+
 			SetSkill(skill, t_level);
 		} else {
 			switch(skill) {
-			case BREWING:
-			case MAKE_POISON:
-			case TINKERING:
-			case RESEARCH:
-			case ALCHEMY:
-			case BAKING:
-			case TAILORING:
-			case BLACKSMITHING:
-			case FLETCHING:
-			case JEWELRY_MAKING:
-			case POTTERY:
+			case SkillBrewing:
+			case SkillMakePoison:
+			case SkillTinkering:
+			case SkillResearch:
+			case SkillAlchemy:
+			case SkillBaking:
+			case SkillTailoring:
+			case SkillBlacksmithing:
+			case SkillFletching:
+			case SkillJewelryMaking:
+			case SkillPottery:
 				if(skilllevel >= RuleI(Skills, MaxTrainTradeskills)) {
 					Message_StringID(13, MORE_SKILLED_THAN_I, pTrainer->GetCleanName());
 					return;
 				}
 				break;
-			case SPECIALIZE_ABJURE:
-			case SPECIALIZE_ALTERATION:
-			case SPECIALIZE_CONJURATION:
-			case SPECIALIZE_DIVINATION:
-			case SPECIALIZE_EVOCATION:
+			case SkillSpecializeAbjure:
+			case SkillSpecializeAlteration:
+			case SkillSpecializeConjuration:
+			case SkillSpecializeDivination:
+			case SkillSpecializeEvocation:
 				if(skilllevel >= RuleI(Skills, MaxTrainSpecializations)) {
 					Message_StringID(13, MORE_SKILLED_THAN_I, pTrainer->GetCleanName());
 					return;
@@ -1754,7 +1758,7 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 				return;
 			}
 
-			if(gmskill->skill_id >= SPECIALIZE_ABJURE && gmskill->skill_id <= SPECIALIZE_EVOCATION)
+			if(gmskill->skill_id >= SkillSpecializeAbjure && gmskill->skill_id <= SkillSpecializeEvocation)
 			{
 				int MaxSpecSkill = GetMaxSkillAfterSpecializationRules(skill, MaxSkillValue);
 				if (skilllevel >= MaxSpecSkill)
@@ -1792,7 +1796,7 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 			gmtsc->SkillID += 100;
 		}
 		else
-			gmtsc->NewSkill = (GetRawSkill((SkillType)gmtsc->SkillID) == 1);
+			gmtsc->NewSkill = (GetRawSkill((SkillUseTypes)gmtsc->SkillID) == 1);
 
 		gmtsc->Cost = Cost;
 
@@ -1886,10 +1890,11 @@ void Client::DoStaminaUpdate() {
 	Stamina_Struct* sta = (Stamina_Struct*)outapp->pBuffer;
 
 	if(zone->GetZoneID() != 151) {
+		int loss = RuleI(Character, FoodLossPerUpdate);
 		if (m_pp.hunger_level > 0)
-			m_pp.hunger_level-=35;
+			m_pp.hunger_level-=loss;
 		if (m_pp.thirst_level > 0)
-			m_pp.thirst_level-=35;
+			m_pp.thirst_level-=loss;
 		sta->food = m_pp.hunger_level > 6000 ? 6000 : m_pp.hunger_level;
 		sta->water = m_pp.thirst_level> 6000 ? 6000 : m_pp.thirst_level;
 	}
@@ -1935,8 +1940,10 @@ void Client::DoEnduranceUpkeep() {
 		}
 	}
 
-	if(upkeep_sum != 0)
+	if(upkeep_sum != 0){
 		SetEndurance(GetEndurance() - upkeep_sum);
+		TryTriggerOnValueAmount(false, false, true);
+	}
 }
 
 void Client::CalcRestState() {

@@ -1,6 +1,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 
 SET(shared_memory_sources
+	base_data.cpp
 	items.cpp
 	loot.cpp
 	main.cpp
@@ -10,6 +11,7 @@ SET(shared_memory_sources
 )
 
 SET(shared_memory_headers
+	base_data.h
 	items.h
 	loot.h
 	npc_faction.h
@@ -33,9 +35,7 @@ IF(MINGW)
 ENDIF(MINGW)
 
 IF(UNIX)
-	IF(NOT FREEBSD)
-		TARGET_LINK_LIBRARIES(shared_memory "dl")
-	ENDIF(NOT FREEBSD)
+	TARGET_LINK_LIBRARIES(shared_memory "${CMAKE_DL_LIBS}")
 	TARGET_LINK_LIBRARIES(shared_memory "z")
 	TARGET_LINK_LIBRARIES(shared_memory "m")
 	TARGET_LINK_LIBRARIES(shared_memory "rt")

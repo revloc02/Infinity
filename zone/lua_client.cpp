@@ -422,27 +422,27 @@ void Lua_Client::IncreaseLanguageSkill(int skill_id, int value) {
 
 int Lua_Client::GetRawSkill(int skill_id) {
 	Lua_Safe_Call_Int();
-	return self->GetRawSkill(static_cast<SkillType>(skill_id));
+	return self->GetRawSkill(static_cast<SkillUseTypes>(skill_id));
 }
 
 bool Lua_Client::HasSkill(int skill_id) {
 	Lua_Safe_Call_Bool();
-	return self->HasSkill(static_cast<SkillType>(skill_id));
+	return self->HasSkill(static_cast<SkillUseTypes>(skill_id));
 }
 
 bool Lua_Client::CanHaveSkill(int skill_id) {
 	Lua_Safe_Call_Bool();
-	return self->CanHaveSkill(static_cast<SkillType>(skill_id));
+	return self->CanHaveSkill(static_cast<SkillUseTypes>(skill_id));
 }
 
 void Lua_Client::SetSkill(int skill_id, int value) {
 	Lua_Safe_Call_Void();
-	self->SetSkill(static_cast<SkillType>(skill_id), value);
+	self->SetSkill(static_cast<SkillUseTypes>(skill_id), value);
 }
 
 void Lua_Client::AddSkill(int skill_id, int value) {
 	Lua_Safe_Call_Void();
-	self->AddSkill(static_cast<SkillType>(skill_id), value);
+	self->AddSkill(static_cast<SkillUseTypes>(skill_id), value);
 }
 
 void Lua_Client::CheckSpecializeIncrease(int spell_id) {
@@ -452,12 +452,12 @@ void Lua_Client::CheckSpecializeIncrease(int spell_id) {
 
 void Lua_Client::CheckIncreaseSkill(int skill_id, Lua_Mob target) {
 	Lua_Safe_Call_Void();
-	self->CheckIncreaseSkill(static_cast<SkillType>(skill_id), target);
+	self->CheckIncreaseSkill(static_cast<SkillUseTypes>(skill_id), target);
 }
 
 void Lua_Client::CheckIncreaseSkill(int skill_id, Lua_Mob target, int chance_mod) {
 	Lua_Safe_Call_Void();
-	self->CheckIncreaseSkill(static_cast<SkillType>(skill_id), target, chance_mod);
+	self->CheckIncreaseSkill(static_cast<SkillUseTypes>(skill_id), target, chance_mod);
 }
 
 void Lua_Client::SetLanguageSkill(int language, int value) {
@@ -467,7 +467,7 @@ void Lua_Client::SetLanguageSkill(int language, int value) {
 
 int Lua_Client::MaxSkill(int skill_id) {
 	Lua_Safe_Call_Int();
-	return self->MaxSkill(static_cast<SkillType>(skill_id));
+	return self->MaxSkill(static_cast<SkillUseTypes>(skill_id));
 }
 
 bool Lua_Client::IsMedding() {
@@ -558,6 +558,11 @@ void Lua_Client::UnscribeSpellAll() {
 void Lua_Client::UnscribeSpellAll(bool update_client) {
 	Lua_Safe_Call_Void();
 	self->UnscribeSpellAll(update_client);
+}
+
+void Lua_Client::TrainDisc(int itemid) {
+	Lua_Safe_Call_Void();
+	self->TrainDiscipline(itemid);
 }
 
 void Lua_Client::UntrainDisc(int slot) {
@@ -1204,6 +1209,42 @@ void Lua_Client::QueuePacket(Lua_Packet app, bool ack_req, int client_connection
 	self->QueuePacket(app, ack_req, static_cast<Mob::CLIENT_CONN_STATUS>(client_connection_status), static_cast<eqFilterType>(filter));
 }
 
+int Lua_Client::GetHunger() {
+	Lua_Safe_Call_Int();
+	return self->GetHunger();
+}
+
+int Lua_Client::GetThirst() {
+	Lua_Safe_Call_Int();
+	return self->GetThirst();
+}
+
+void Lua_Client::SetHunger(int in_hunger) {
+	Lua_Safe_Call_Void();
+	self->SetHunger(in_hunger);
+}
+
+void Lua_Client::SetThirst(int in_thirst) {
+	Lua_Safe_Call_Void();
+	self->SetThirst(in_thirst);
+}
+
+void Lua_Client::SetConsumption(int in_hunger, int in_thirst) {
+	Lua_Safe_Call_Void();
+	self->SetConsumption(in_hunger, in_thirst);
+}
+
+void Lua_Client::SendMarqueeMessage(uint32 type, uint32 priority, uint32 fade_in, uint32 fade_out, uint32 duration, std::string msg) {
+	Lua_Safe_Call_Void();
+	self->SendMarqueeMessage(type, priority, fade_in, fade_out, duration, msg);
+}
+
+void Lua_Client::PlayMP3(std::string file)
+{
+	Lua_Safe_Call_Void();
+	self->PlayMP3(file.c_str());
+}
+
 luabind::scope lua_register_client() {
 	return luabind::class_<Lua_Client, Lua_Mob>("Client")
 		.def(luabind::constructor<>())
@@ -1316,6 +1357,7 @@ luabind::scope lua_register_client() {
 		.def("UnscribeSpell", (void(Lua_Client::*)(int,bool))&Lua_Client::UnscribeSpell)
 		.def("UnscribeSpellAll", (void(Lua_Client::*)(void))&Lua_Client::UnscribeSpellAll)
 		.def("UnscribeSpellAll", (void(Lua_Client::*)(bool))&Lua_Client::UnscribeSpellAll)
+		.def("TrainDisc", (void(Lua_Client::*)(int))&Lua_Client::TrainDisc)
 		.def("UntrainDisc", (void(Lua_Client::*)(int))&Lua_Client::UntrainDisc)
 		.def("UntrainDisc", (void(Lua_Client::*)(int,bool))&Lua_Client::UntrainDisc)
 		.def("UntrainDiscAll", (void(Lua_Client::*)(void))&Lua_Client::UntrainDiscAll)
@@ -1443,7 +1485,14 @@ luabind::scope lua_register_client() {
 		.def("QueuePacket", (void(Lua_Client::*)(Lua_Packet))&Lua_Client::QueuePacket)
 		.def("QueuePacket", (void(Lua_Client::*)(Lua_Packet,bool))&Lua_Client::QueuePacket)
 		.def("QueuePacket", (void(Lua_Client::*)(Lua_Packet,bool,int))&Lua_Client::QueuePacket)
-		.def("QueuePacket", (void(Lua_Client::*)(Lua_Packet,bool,int,int))&Lua_Client::QueuePacket);
+		.def("QueuePacket", (void(Lua_Client::*)(Lua_Packet,bool,int,int))&Lua_Client::QueuePacket)
+		.def("GetHunger", (int(Lua_Client::*)(void))&Lua_Client::GetHunger)
+		.def("GetThirst", (int(Lua_Client::*)(void))&Lua_Client::GetThirst)
+		.def("SetHunger", (void(Lua_Client::*)(int))&Lua_Client::SetHunger)
+		.def("SetThirst", (void(Lua_Client::*)(int))&Lua_Client::SetThirst)
+		.def("SetConsumption", (void(Lua_Client::*)(int, int))&Lua_Client::SetConsumption)
+		.def("SendMarqueeMessage", (void(Lua_Client::*)(uint32, uint32, uint32, uint32, uint32, std::string))&Lua_Client::SendMarqueeMessage)
+		.def("PlayMP3", (void(Lua_Client::*)(std::string))&Lua_Client::PlayMP3);
 }
 
 luabind::scope lua_register_inventory_where() {

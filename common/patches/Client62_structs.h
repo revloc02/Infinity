@@ -312,7 +312,11 @@ struct NewZone_Struct {
 /*0404*/	float	fog_maxclip[4];
 /*0420*/	float	gravity;
 /*0424*/	uint8	time_type;
-/*0425*/	uint8	unknown360[49];
+/*0425*/    uint8   rain_chance[4];
+/*0429*/    uint8   rain_duration[4];
+/*0433*/    uint8   snow_chance[4];
+/*0437*/    uint8   snow_duration[4];
+/*0441*/	uint8	unknown360[33];
 /*0474*/	uint8	sky;					// Sky Type
 /*0475*/	uint8	unknown331[13];			// ***Placeholder
 /*0488*/	float	zone_exp_multiplier;	// Experience Multiplier
@@ -626,7 +630,7 @@ struct RaidLeadershipAA_Struct {
 static const uint32 MAX_PP_LANGUAGE		= 28;
 static const uint32 MAX_PP_SPELLBOOK	= 400;
 static const uint32 MAX_PP_MEMSPELL		= 9;
-static const uint32 MAX_PP_SKILL		= 75;
+static const uint32 MAX_PP_SKILL		= _SkillPacketArraySize;	// 100 - actual skills buffer size
 static const uint32 MAX_PP_AA_ARRAY		= 240;
 static const uint32 MAX_GROUP_MEMBERS	= 6;
 struct PlayerProfile_Struct
@@ -722,9 +726,9 @@ struct PlayerProfile_Struct
 /*4760*/	int32				silver_cursor;		// Silver on cursor
 /*4764*/	int32				copper_cursor;		// Copper on cursor
 /*4768*/	int32				platinum_shared;        // Platinum shared between characters
-/*4772*/	uint8				unknown3812[24];        // @bp unknown skills?
-/*4796*/	uint32				skills[MAX_PP_SKILL];
-/*5096*/	uint8				unknown5096[284];     // @bp unknown skills?
+/*4772*/	uint8				unknown3812[24];
+/*4796*/	uint32				skills[MAX_PP_SKILL];	// 100 dword buffer
+/*5196*/	uint8				unknown5096[184];
 /*5380*/	uint32				pvp2;	//
 /*5384*/	uint32				unknown4420;	//
 /*5388*/	uint32				pvptype;	//
@@ -2665,7 +2669,7 @@ struct MobRename_Struct {
 };
 
 struct PlayMP3_Struct {
-	char filename[128];
+	char filename[0];
 };
 
 //this is for custom title display in the skill window

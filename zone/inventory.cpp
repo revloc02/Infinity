@@ -207,12 +207,15 @@ void Client::SummonItem(uint32 item_id, int16 charges, uint32 aug1, uint32 aug2,
 		Message(0, "No such item: %i", item_id);
 		return;
 	} else {
-		// if 0 and max charges 0 and stackable, set the created item charge to 1
-		if (charges == 0 && item->MaxCharges == 0 && item->Stackable)
+		// if the item is stackable and the charge amount is -1 or 0 then set to 1 charge.
+		// removed  && item->MaxCharges == 0 if -1 or 0 was passed max charges is irrelevant 
+		if (charges <= 0 && item->Stackable) { 
 			charges = 1;
-		// if 0 or no charge value was passed, set the created item charge to max charges
-		else if(charges == 0)
+		// if the charges is -1, then no charge value was passed in set to max charges
+		} else if(charges == -1) {
 			charges = item->MaxCharges;
+		// in any other situation just use charges as passed
+		}
 	}
 	// Checking to see if the Item is lore or not.
 	bool foundlore = CheckLoreConflict(item);
@@ -630,7 +633,7 @@ bool Client::TryStacking(ItemInst* item, uint8 type, bool try_worn, bool try_cur
 bool Client::AutoPutLootInInventory(ItemInst& inst, bool try_worn, bool try_cursor, ServerLootItem_Struct** bag_item_data)
 {
 	// #1: Try to auto equip
-	if (try_worn && inst.IsEquipable(GetBaseRace(), GetClass()) && inst.GetItem()->ReqLevel<=level && !inst.GetItem()->Attuneable && inst.GetItem()->ItemType != ItemTypeAugment)
+	if (try_worn && inst.IsEquipable(GetBaseRace(), GetClass()) && inst.GetItem()->ReqLevel<=level && !inst.GetItem()->Attuneable && inst.GetItem()->ItemType != ItemTypeAugmentation)
 	{
 		for (int16 i = 0; i < 9999; i++) // originally (i < 22)
 		{
@@ -643,7 +646,7 @@ bool Client::AutoPutLootInInventory(ItemInst& inst, bool try_worn, bool try_curs
 			{
 				if( i == SLOT_PRIMARY && inst.IsWeapon() ) // If item is primary slot weapon
 				{
-					if( (inst.GetItem()->ItemType == ItemType2HS) || (inst.GetItem()->ItemType == ItemType2HB) || (inst.GetItem()->ItemType == ItemType2HPierce) ) // and uses 2hs \ 2hb \ 2hp
+					if( (inst.GetItem()->ItemType == ItemType2HSlash) || (inst.GetItem()->ItemType == ItemType2HBlunt) || (inst.GetItem()->ItemType == ItemType2HPiercing) ) // and uses 2hs \ 2hb \ 2hp
 					{
 						if( m_inv[SLOT_SECONDARY] ) // and if secondary slot is not empty
 						{
@@ -654,7 +657,7 @@ bool Client::AutoPutLootInInventory(ItemInst& inst, bool try_worn, bool try_curs
 				if( i== SLOT_SECONDARY && m_inv[SLOT_PRIMARY]) // check to see if primary slot is a two hander
 				{
 					uint8 use = m_inv[SLOT_PRIMARY]->GetItem()->ItemType;
-					if(use == ItemType2HS || use == ItemType2HB || use == ItemType2HPierce)
+					if(use == ItemType2HSlash || use == ItemType2HBlunt || use == ItemType2HPiercing)
 						continue;
 				}
 				if

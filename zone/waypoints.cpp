@@ -47,11 +47,11 @@ static inline float ABS(float x) {
 	return(x);
 }
 
-void NPC::AI_SetRoambox(float iDist, float iRoamDist, uint32 iDelay) {
-	AI_SetRoambox(iDist, GetX()+iRoamDist, GetX()-iRoamDist, GetY()+iRoamDist, GetY()-iRoamDist, iDelay);
+void NPC::AI_SetRoambox(float iDist, float iRoamDist, uint32 iDelay, uint32 iMinDelay) {
+	AI_SetRoambox(iDist, GetX()+iRoamDist, GetX()-iRoamDist, GetY()+iRoamDist, GetY()-iRoamDist, iDelay, iMinDelay);
 }
 
-void NPC::AI_SetRoambox(float iDist, float iMaxX, float iMinX, float iMaxY, float iMinY, uint32 iDelay) {
+void NPC::AI_SetRoambox(float iDist, float iMaxX, float iMinX, float iMaxY, float iMinY, uint32 iDelay, uint32 iMinDelay) {
 	roambox_distance = iDist;
 	roambox_max_x = iMaxX;
 	roambox_min_x = iMinX;
@@ -59,6 +59,7 @@ void NPC::AI_SetRoambox(float iDist, float iMaxX, float iMinX, float iMaxY, floa
 	roambox_min_y = iMinY;
 	roambox_movingto_x = roambox_max_x + 1; // this will trigger a recalc
 	roambox_delay = iDelay;
+	roambox_min_delay = iMinDelay;
 }
 
 void NPC::DisplayWaypointInfo(Client *c) {
@@ -73,7 +74,7 @@ void NPC::DisplayWaypointInfo(Client *c) {
 	std::vector<wplist>::iterator cur, end;
 	cur = Waypoints.begin();
 	end = Waypoints.end();
-	for(; cur != end; cur++) {
+	for(; cur != end; ++cur) {
 		c->Message(0,"Waypoint %d: (%.2f,%.2f,%.2f,%.2f) pause %d",
 				cur->index,
 				cur->x,
@@ -272,12 +273,8 @@ void NPC::CalculateNewWaypoint()
 		std::list<wplist>::iterator iter = closest.begin();
 		if(closest.size() != 0)
 		{
-			int idx = MakeRandomInt(0, closest.size() - 1);
 			iter = closest.begin();
-			for(int i = 0; i < idx; ++i)
-			{
-				iter++;
-			}
+			std::advance(iter, MakeRandomInt(0, closest.size() - 1));
 			cur_wp = (*iter).index;
 		}
 
@@ -335,7 +332,7 @@ void NPC::CalculateNewWaypoint()
 		{
 			if(CheckLosFN((*iter).x, (*iter).y, (*iter).z, GetSize()))
 			{
-				iter++;
+				++iter;
 			}
 			else
 			{
@@ -345,12 +342,8 @@ void NPC::CalculateNewWaypoint()
 
 		if(closest.size() != 0)
 		{
-			int idx = MakeRandomInt(0, closest.size() - 1);
 			iter = closest.begin();
-			for(int i = 0; i < idx; ++i)
-			{
-				iter++;
-			}
+			std::advance(iter, MakeRandomInt(0, closest.size() - 1));
 			cur_wp = (*iter).index;
 		}
 		break;
@@ -406,7 +399,7 @@ void NPC::GetClosestWaypoint(std::list<wplist> &wp_list, int count, float m_x, f
 	for(int i = 0; i < count; ++i)
 	{
 		wp_list.push_back(Waypoints[(*iter).index]);
-		iter++;
+		++iter;
 	}
 }
 
@@ -519,8 +512,6 @@ float Mob::CalculateHeadingToTarget(float in_x, float in_y) {
 bool Mob::MakeNewPositionAndSendUpdate(float x, float y, float z, float speed, bool checkZ) {
 	if(GetID()==0)
 		return true;
-
-	_ZP(Mob_CalculateNewPosition2);
 
 	if ((x_pos-x == 0) && (y_pos-y == 0)) {//spawn is at target coords
 		if(z_pos-z != 0) {
@@ -755,12 +746,9 @@ bool Mob::CalculateNewPosition(float x, float y, float z, float speed, bool chec
 	if(GetID()==0)
 		return true;
 
-	_ZP(Mob_CalculateNewPosition);
-
 	float nx = x_pos;
 	float ny = y_pos;
 	float nz = z_pos;
-//	float nh = heading;
 
 	// if NPC is rooted
 	if (speed == 0.0) {
@@ -917,14 +905,12 @@ void NPC::AssignWaypoints(int32 grid) {
 	if(!GridErr)
 	{
 		this->CastToNPC()->SetGrid(grid);	// Assign grid number
-		adverrorinfo = 7561;
 
 		// Retrieve all waypoints for this grid
 		if(database.RunQuery(query,MakeAnyLenString(&query,"SELECT `x`,`y`,`z`,`pause`,`heading` FROM grid_entries WHERE `gridid`=%i AND `zoneid`=%i ORDER BY `number`",grid,zone->GetZoneID()),errbuf,&result))
 		{
 			roamer = true;
 			max_wp = -1;	// Initialize it; will increment it for each waypoint successfully added to the list
-			adverrorinfo = 7564;
 
 			while((row = mysql_fetch_row(result)))
 			{
@@ -1084,7 +1070,6 @@ uint8 ZoneDatabase::GetGridType2(uint32 grid, uint16 zoneid) {
 }
 
 bool ZoneDatabase::GetWaypoints(uint32 grid, uint16 zoneid, uint32 num, wplist* wp) {
-	_CP(Database_GetWaypoints);
 	char *query = 0;
 	char errbuff[MYSQL_ERRMSG_SIZE];
 	MYSQL_RES *result;

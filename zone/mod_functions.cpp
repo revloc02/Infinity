@@ -33,7 +33,7 @@ void Zone::mod_repop() { return; }
 void NPC::mod_prespawn(Spawn2 *sp) { return; }
 
 //Base damage from NPC::Attack
-int NPC::mod_npc_damage(int damage, SkillType skillinuse, int hand, const Item_Struct* weapon, Mob* other) { return(damage); }
+int NPC::mod_npc_damage(int damage, SkillUseTypes skillinuse, int hand, const Item_Struct* weapon, Mob* other) { return(damage); }
 
 //Mob c has been given credit for a kill.  This is called after the regular EVENT_KILLED_MERIT event.
 void NPC::mod_npc_killed_merit(Mob* c) { return; }
@@ -42,7 +42,7 @@ void NPC::mod_npc_killed_merit(Mob* c) { return; }
 void NPC::mod_npc_killed(Mob* oos) { return; }
 
 //Base damage from Client::Attack - can cover myriad skill types
-int Client::mod_client_damage(int damage, SkillType skillinuse, int hand, const ItemInst* weapon, Mob* other) { return(damage); }
+int Client::mod_client_damage(int damage, SkillUseTypes skillinuse, int hand, const ItemInst* weapon, Mob* other) { return(damage); }
 
 //message is char[4096], don't screw it up. Return true for normal behavior, false to return immediately.
 // Channels:
@@ -62,7 +62,7 @@ bool Client::mod_client_message(char* message, uint8 chan_num) { return(true); }
 
 //Skillup override.  When this is called the regular skillup check has failed.  Return false to proceed with default behavior.
 //This will NOT allow a client to increase skill past a cap.
-bool Client::mod_can_increase_skill(SkillType skillid, Mob* against_who) { return(false); }
+bool Client::mod_can_increase_skill(SkillUseTypes skillid, Mob* against_who) { return(false); }
 
 //chance of general skill increase, rolled against 0-99 where higher chance is better.
 int16 Client::mod_increase_skill_chance(int16 chance, Mob* against_who) { return(chance); }
@@ -110,11 +110,15 @@ int32 Client::mod_client_xp(int32 in_xp, NPC *npc) { return(in_xp); }
 //To adjust how much XP is given per kill, use mod_client_xp
 uint32 Client::mod_client_xp_for_level(uint32 xp, uint16 check_level) { return(xp); }
 
+//Food and drink values as computed by consume requests.  Return < 0 to abort the request.
+int Client::mod_food_value(const Item_Struct *item, int change) { return(change); }
+int Client::mod_drink_value(const Item_Struct *item, int change) { return(change); }
+
 //effect_vallue - Spell effect value as calculated by default formulas.  You will want to ignore effects that don't lend themselves to scaling - pet ID's, gate coords, etc.
 int Mob::mod_effect_value(int effect_value, uint16 spell_id, int effect_type, Mob* caster) { return(effect_value); }
 
 //chancetohit - 0 to 100 percent - set over 1000 for a guaranteed hit
-float Mob::mod_hit_chance(float chancetohit, SkillType skillinuse, Mob* attacker) { return(chancetohit); }
+float Mob::mod_hit_chance(float chancetohit, SkillUseTypes skillinuse, Mob* attacker) { return(chancetohit); }
 
 //Final riposte chance
 float Mob::mod_riposte_chance(float ripostechance, Mob* attacker) { return(ripostechance); }
@@ -146,7 +150,7 @@ int32 Mob::mod_bash_damage(int32 dmg) { return(dmg); }
 int32 Mob::mod_frenzy_damage(int32 dmg) { return(dmg); }
 
 //Special attack damage after all other bonuses are applied.
-int32 Mob::mod_monk_special_damage(int32 ndamage, SkillType skill_type) { return(ndamage); }
+int32 Mob::mod_monk_special_damage(int32 ndamage, SkillUseTypes skill_type) { return(ndamage); }
 
 //ndamage - Backstab damage as calculated by default formulas
 int32 Mob::mod_backstab_damage(int32 ndamage) { return(ndamage); }
@@ -179,9 +183,11 @@ int Mob::mod_spell_stack(uint16 spellid1, int caster_level1, Mob* caster1, uint1
 
 //Sum of various resists rolled against a value of 200.
 int Mob::mod_spell_resist(int resist_chance, int level_mod, int resist_modifier, int target_resist, uint8 resist_type, uint16 spell_id, Mob* caster) {
-	int final = resist_chance + level_mod + resist_modifier + target_resist;
-	return(final);
+	return(resist_chance);
 }
 
 //Spell is cast by this on spelltar, called from spellontarget after the event_cast_on NPC event
 void Mob::mod_spell_cast(uint16 spell_id, Mob* spelltar, bool reflect, bool use_resist_adjust, int16 resist_adjust, bool isproc) { return; }
+
+//At this point all applicable aggro checks have succeeded.  Attacker should aggro unless we return false.
+bool Mob::mod_will_aggro(Mob *attacker, Mob *on) { return(true); }

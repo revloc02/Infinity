@@ -164,7 +164,7 @@ void Doors::HandleClick(Client* sender, uint8 trigger)
 				{
 					if(sender->GetInv().HasItem(RuleI(Adventure, ItemIDToEnablePorts)) == SLOT_INVALID)
 					{
-						sender->Message_StringID(13, 5141);
+						sender->Message_StringID(13, DUNGEON_SEALED);
 						safe_delete(outapp);
 						return;
 					}
@@ -292,12 +292,12 @@ void Doors::HandleClick(Client* sender, uint8 trigger)
 		}
 		else if(lockpicks != nullptr)
 		{
-			if(sender->GetSkill(PICK_LOCK))
+			if(sender->GetSkill(SkillPickLock))
 			{
 				if(lockpicks->GetItem()->ItemType == ItemTypeLockPick)
 				{
-					float modskill=sender->GetSkill(PICK_LOCK);
-					sender->CheckIncreaseSkill(PICK_LOCK, nullptr, 1);
+					float modskill=sender->GetSkill(SkillPickLock);
+					sender->CheckIncreaseSkill(SkillPickLock, nullptr, 1);
 
 #if EQDEBUG>=5
 					LogFile->write(EQEMuLog::Debug, "Client has lockpicks: skill=%f", modskill);

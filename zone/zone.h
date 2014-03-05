@@ -104,6 +104,7 @@ public:
 	inline const uint32	GetZoneID() const { return zoneid; }
 	inline const uint32	GetInstanceID() const { return instanceid; }
 	inline const uint16	GetInstanceVersion() const { return instanceversion; }
+	inline const uint8	GetZoneType() const { return zone_type; }
 
 	inline Timer* GetInstanceTimer() { return Instance_Timer; }
 
@@ -143,11 +144,14 @@ public:
 
 	bool	Depop(bool StartSpawnTimer = false);
 	void	Repop(uint32 delay = 0);
+	void	ClearNPCTypeCache(int id);
 	void	SpawnStatus(Mob* client);
 	void	ShowEnabledSpawnStatus(Mob* client);
 	void	ShowDisabledSpawnStatus(Mob* client);
 	void	ShowSpawnStatusByID(Mob* client, uint32 spawnid);
 	void	StartShutdownTimer(uint32 set_time = (RuleI(Zone, AutoShutdownDelay)));
+	void    ChangeWeather();
+	bool	HasWeather();
 	void	AddAuth(ServerZoneIncommingClient_Struct* szic);
 	void	RemoveAuth(const char* iCharName);
 	void	ResetAuth();
@@ -211,7 +215,6 @@ public:
 	WaterMap* watermap;
 	PathManager *pathing;
 	NewZone_Struct	newzone_data;
-	uint8	zone_weather;
 
 	SpawnConditionManager spawn_conditions;
 
@@ -231,7 +234,8 @@ public:
 	inline	bool BuffTimersSuspended() const { return newzone_data.SuspendBuffs != 0; };
 
 	time_t	weather_timer;
-	uint8	weather_type;
+	uint8	weather_intensity;
+	uint8	zone_weather;
 
 	uint8 loglevelvar;
 	uint8 merchantvar;
@@ -286,6 +290,7 @@ private:
 	bool	can_castoutdoor;
 	bool	can_levitate;
 	bool	is_hotzone;
+	uint8	zone_type;
 	bool	allow_mercs;
 	uint32	pgraveyard_id, pgraveyard_zoneid;
 	float	pgraveyard_x, pgraveyard_y, pgraveyard_z, pgraveyard_heading;
@@ -322,7 +327,6 @@ private:
 	QGlobalCache *qGlobals;
 	
 	Timer	hotzone_timer;
-	Mutex	MZoneLock;
 };
 
 #endif

@@ -81,7 +81,6 @@ extern DBAsyncFinishedQueue MTdbafq;
 extern DBAsync *dbasync;
 
 bool Zone::Bootup(uint32 iZoneID, uint32 iInstanceID, bool iStaticZone) {
-	_ZP(Zone_Bootup);
 	const char* zonename = database.GetZoneName(iZoneID);
 
 	if (iZoneID == 0 || zonename == 0)
@@ -133,20 +132,6 @@ bool Zone::Bootup(uint32 iZoneID, uint32 iInstanceID, bool iStaticZone) {
 			zone->tradevar = 0;
 			zone->lootvar = 0;
 		}
-	}
-
-	zone->weather_type = database.GetZoneWeather(iZoneID, zone->GetInstanceVersion());
-
-	LogFile->write(EQEMuLog::Debug, "Zone: %s has weather of type %i.", zonename, zone->weather_type);
-
-	if(zone->weather_type > 3 || zone->weather_type == 0) {
-		zone->zone_weather = 0;
-		zone->Weather_Timer->Disable();
-		LogFile->write(EQEMuLog::Debug, "Zone: %s(%i) has no weather type. The weather timer has been disabled.", zonename, iZoneID);
-	}
-	else {
-		zone->zone_weather = 0;
-		LogFile->write(EQEMuLog::Debug, "Zone: %s(%i) has weather type = %i. The weather timer has been enabled.", zonename, iZoneID, zone->weather_type);
 	}
 
 	ZoneLoaded = true;
@@ -271,7 +256,7 @@ bool Zone::LoadZoneObjects() {
 			//tradeskill containers do not have an itemid of 0... at least what I am seeing
 			if (itemid == 0) {
 				// Generic tradeskill container
-				inst = new ItemInst(ItemUseWorldContainer);
+				inst = new ItemInst(ItemInstWorldContainer);
 			}
 			else {
 				// Groundspawn object
@@ -280,7 +265,7 @@ bool Zone::LoadZoneObjects() {
 
 			//Father Nitwit's fix... not perfect...
 			if(inst == nullptr && type != OT_DROPPEDITEM) {
-				inst = new ItemInst(ItemUseWorldContainer);
+				inst = new ItemInst(ItemInstWorldContainer);
 			}
 
 			// Load child objects if container
@@ -342,7 +327,7 @@ int Zone::SaveTempItem(uint32 merchantid, uint32 npcid, uint32 item, int32 charg
 	std::list<MerchantList> merlist = merchanttable[merchantid];
 	std::list<MerchantList>::const_iterator itr;
 	uint32 i = 1;
-	for(itr = merlist.begin();itr != merlist.end();itr++){
+	for (itr = merlist.begin(); itr != merlist.end(); ++itr) {
 		MerchantList ml = *itr;
 		if(ml.item == item)
 			return 0;
@@ -358,7 +343,7 @@ int Zone::SaveTempItem(uint32 merchantid, uint32 npcid, uint32 item, int32 charg
 	TempMerchantList ml;
 	while(freeslot == 0 && !update_charges){
 		freeslot = i;
-		for(tmp_itr = tmp_merlist.begin();tmp_itr != tmp_merlist.end();tmp_itr++){
+		for (tmp_itr = tmp_merlist.begin(); tmp_itr != tmp_merlist.end(); ++tmp_itr) {
 			ml = *tmp_itr;
 			if(ml.item == item){
 				update_charges = true;
@@ -374,7 +359,7 @@ int Zone::SaveTempItem(uint32 merchantid, uint32 npcid, uint32 item, int32 charg
 	if(update_charges){
 		tmp_merlist.clear();
 		std::list<TempMerchantList> oldtmp_merlist = tmpmerchanttable[npcid];
-		for(tmp_itr = oldtmp_merlist.begin();tmp_itr != oldtmp_merlist.end();tmp_itr++){
+		for (tmp_itr = oldtmp_merlist.begin(); tmp_itr != oldtmp_merlist.end(); ++tmp_itr) {
 			TempMerchantList ml2 = *tmp_itr;
 			if(ml2.item != item)
 				tmp_merlist.push_back(ml2);
@@ -420,7 +405,7 @@ uint32 Zone::GetTempMerchantQuantity(uint32 NPCID, uint32 Slot) {
 	std::list<TempMerchantList> TmpMerchantList = tmpmerchanttable[NPCID];
 	std::list<TempMerchantList>::const_iterator Iterator;
 
-	for(Iterator = TmpMerchantList.begin(); Iterator != TmpMerchantList.end(); Iterator++)
+	for (Iterator = TmpMerchantList.begin(); Iterator != TmpMerchantList.end(); ++Iterator)
 		if((*Iterator).slot == Slot)
 			return (*Iterator).charges;
 
@@ -484,7 +469,7 @@ void Zone::LoadNewMerchantData(uint32 merchantid){
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	std::list<MerchantList> merlist;
-	if (database.RunQuery(query, MakeAnyLenString(&query, "SELECT item, slot, faction_required, level_required, alt_currency_cost FROM merchantlist WHERE merchantid=%d", merchantid), errbuf, &result)) {
+	if (database.RunQuery(query, MakeAnyLenString(&query, "SELECT item, slot, faction_required, level_required, alt_currency_cost, classes_required FROM merchantlist WHERE merchantid=%d", merchantid), errbuf, &result)) {
 		while((row = mysql_fetch_row(result))) {
 			MerchantList ml;
 			ml.id = merchantid;
@@ -493,6 +478,7 @@ void Zone::LoadNewMerchantData(uint32 merchantid){
 			ml.faction_required = atoul(row[2]);
 			ml.level_required = atoul(row[3]);
 			ml.alt_currency_cost = atoul(row[3]);
+			ml.classes_required = atoul(row[4]);
 			merlist.push_back(ml);
 		}
 		merchanttable[merchantid] = merlist;
@@ -527,7 +513,7 @@ void Zone::LoadMerchantData_result(MYSQL_RES* result) {
 				found = true;
 				break;
 			}
-			iter++;
+			++iter;
 		}
 
 		if(found) {
@@ -539,6 +525,7 @@ void Zone::LoadMerchantData_result(MYSQL_RES* result) {
 		ml.faction_required = atoul(row[3]);
 		ml.level_required = atoul(row[4]);
 		ml.alt_currency_cost = atoul(row[5]);
+		ml.classes_required = atoul(row[6]);
 		cur->second.push_back(ml);
 	}
 }
@@ -552,7 +539,7 @@ void Zone::GetMerchantDataForZoneLoad(){
 	workpt.b1() = DBA_b1_Zone_MerchantLists;
 	DBAsyncWork* dbaw = new DBAsyncWork(&database, &MTdbafq, workpt, DBAsync::Read);
 	dbaw->AddQuery(1, &query, MakeAnyLenString(&query,
-		"select ml.merchantid,ml.slot,ml.item,ml.faction_required,ml.level_required,ml.alt_currency_cost "
+		"select ml.merchantid,ml.slot,ml.item,ml.faction_required,ml.level_required,ml.alt_currency_cost,ml.classes_required "
 		"from merchantlist ml, npc_types nt, spawnentry se, spawn2 s2 "
 		"where nt.merchant_id=ml.merchantid and nt.id=se.npcid "
 		"and se.spawngroupid=s2.spawngroupid and s2.zone='%s' and s2.version=%u "
@@ -616,7 +603,7 @@ void Zone::LoadMercTemplates(){
 				tempMercTemplate.Stances[i] = 0;
 			}
 
-			for(std::list<MercStanceInfo>::iterator mercStanceListItr = merc_stances.begin(); mercStanceListItr != merc_stances.end(); mercStanceListItr++) {
+			for (std::list<MercStanceInfo>::iterator mercStanceListItr = merc_stances.begin(); mercStanceListItr != merc_stances.end(); ++mercStanceListItr) {
 				if(mercStanceListItr->ClassID == tempMercTemplate.ClassID && mercStanceListItr->ProficiencyID == tempMercTemplate.ProficiencyID) {
 					zone->merc_stance_list[tempMercTemplate.MercTemplateID].push_back((*mercStanceListItr));
 					tempMercTemplate.Stances[stanceIndex] = mercStanceListItr->StanceID;
@@ -899,11 +886,11 @@ Zone::Zone(uint32 in_zoneid, uint32 in_instanceid, const char* in_short_name)
 		long_name = strcpy(new char[18], "Long zone missing");
 	}
 	autoshutdown_timer.Start(AUTHENTICATION_TIMEOUT * 1000, false);
-	Weather_Timer = new Timer((MakeRandomInt(1800, 7200) + 30) * 2000);
+	Weather_Timer = new Timer(60000);
 	Weather_Timer->Start();
 	LogFile->write(EQEMuLog::Debug, "The next weather check for zone: %s will be in %i seconds.", short_name, Weather_Timer->GetRemainingTime()/1000);
-	weather_type = 0;
 	zone_weather = 0;
+	weather_intensity = 0;
 	blocked_spells = nullptr;
 	totalBS = 0;
 	aas = nullptr;
@@ -1158,7 +1145,7 @@ bool Zone::LoadZoneCFG(const char* filename, uint16 instance_id, bool DontLoadDe
 	{
 		map_name = nullptr;
 		if(!database.GetZoneCFG(database.GetZoneID(filename), 0, &newzone_data, can_bind,
-			can_combat, can_levitate, can_castoutdoor, is_city, is_hotzone, allow_mercs, default_ruleset, &map_name))
+			can_combat, can_levitate, can_castoutdoor, is_city, is_hotzone, allow_mercs, zone_type, default_ruleset, &map_name))
 		{
 			LogFile->write(EQEMuLog::Error, "Error loading the Zone Config.");
 			return false;
@@ -1169,11 +1156,11 @@ bool Zone::LoadZoneCFG(const char* filename, uint16 instance_id, bool DontLoadDe
 		//Fall back to base zone if we don't find the instance version.
 		map_name = nullptr;
 		if(!database.GetZoneCFG(database.GetZoneID(filename), instance_id, &newzone_data, can_bind,
-			can_combat, can_levitate, can_castoutdoor, is_city, is_hotzone, allow_mercs, default_ruleset, &map_name))
+			can_combat, can_levitate, can_castoutdoor, is_city, is_hotzone, allow_mercs, zone_type, default_ruleset, &map_name))
 		{
 			safe_delete_array(map_name);
 			if(!database.GetZoneCFG(database.GetZoneID(filename), 0, &newzone_data, can_bind,
-			can_combat, can_levitate, can_castoutdoor, is_city, is_hotzone, allow_mercs, default_ruleset, &map_name))
+			can_combat, can_levitate, can_castoutdoor, is_city, is_hotzone, allow_mercs, zone_type, default_ruleset, &map_name))
 			{
 				LogFile->write(EQEMuLog::Error, "Error loading the Zone Config.");
 				return false;
@@ -1272,10 +1259,6 @@ uint32 Zone::CountAuth() {
 }
 
 bool Zone::Process() {
-	LockMutex lock(&MZoneLock);
-	_ZP(Zone_Process);
-
-
 	spawn_conditions.Process();
 
 	if(spawn2_timer.Check()) {
@@ -1368,38 +1351,7 @@ bool Zone::Process() {
 
 	if(Weather_Timer->Check()){
 		Weather_Timer->Disable();
-		uint16 tmpweather = MakeRandomInt(0, 100);
-
-		if(zone->weather_type != 0)
-		{
-			if(tmpweather >= 80)
-			{
-				// A change in the weather....
-				uint8 tmpOldWeather = zone_weather;
-
-				if(zone->zone_weather == 0)
-					zone->zone_weather = zone->weather_type;
-				else
-					zone->zone_weather = 0;
-
-				LogFile->write(EQEMuLog::Debug, "The weather for zone: %s has changed. Old weather was = %i. New weather is = %i", zone->GetShortName(), tmpOldWeather, zone_weather);
-
-				this->weatherSend();
-			}
-			else
-				LogFile->write(EQEMuLog::Debug, "The weather for zone: %s is not going to change. Chance was = %i percent.", zone->GetShortName(), tmpweather);
-
-			uint32 weatherTime = 0;
-
-			if(zone->zone_weather != zone->weather_type)
-				weatherTime = (MakeRandomInt(1800, 7200) + 30) * 2000;
-			else
-				weatherTime = (MakeRandomInt(900, 2700) + 30) * 1000;
-
-			Weather_Timer->Start(weatherTime);
-
-			LogFile->write(EQEMuLog::Debug, "The next weather check for zone: %s will be in %i seconds.", zone->GetShortName(), Weather_Timer->GetRemainingTime()/1000);
-		}
+		this->ChangeWeather();
 	}
 
 	if(qGlobals)
@@ -1429,8 +1381,130 @@ bool Zone::Process() {
 	return true;
 }
 
+void Zone::ChangeWeather() 
+{
+	if(!HasWeather())
+	{
+		Weather_Timer->Disable();
+		return;
+	}
+
+	int chance = MakeRandomInt(0, 3);
+	uint8 rainchance = zone->newzone_data.rain_chance[chance];
+	uint8 rainduration = zone->newzone_data.rain_duration[chance];
+	uint8 snowchance = zone->newzone_data.snow_chance[chance];
+	uint8 snowduration = zone->newzone_data.snow_duration[chance];
+	uint32 weathertimer = 0;
+	uint16 tmpweather = MakeRandomInt(0, 100);
+	uint8 duration = 0;
+	uint8 tmpOldWeather = zone->zone_weather;
+	bool changed = false;
+
+	if(tmpOldWeather == 0)
+	{
+		if(rainchance > 0 || snowchance > 0)
+		{
+			uint8 intensity = MakeRandomInt(1, 10);
+			if((rainchance > snowchance) || (rainchance == snowchance))
+			{
+				//It's gunna rain!
+				if(rainchance >= tmpweather)
+				{
+					if(rainduration == 0)
+						duration = 1;
+					else
+						duration = rainduration*3; //Duration is 1 EQ hour which is 3 earth minutes.
+
+					weathertimer = (duration*60)*1000;
+					Weather_Timer->Start(weathertimer);
+					zone->zone_weather = 1;
+					zone->weather_intensity = intensity;
+					changed = true;
+				}
+			}
+			else
+			{
+				//It's gunna snow!
+				if(snowchance >= tmpweather)
+				{
+					if(snowduration == 0)
+						duration = 1;
+					else
+						duration = snowduration*3;
+					weathertimer = (duration*60)*1000;
+					Weather_Timer->Start(weathertimer);
+					zone->zone_weather = 2;
+					zone->weather_intensity = intensity;
+					changed = true;
+				}
+			}
+		}
+	}
+	else
+	{
+		changed = true;
+		//We've had weather, now taking a break
+		if(tmpOldWeather == 1)
+		{
+			if(rainduration == 0)
+				duration = 1;
+			else
+				duration = rainduration*3; //Duration is 1 EQ hour which is 3 earth minutes.
+
+			weathertimer = (duration*60)*1000;
+			Weather_Timer->Start(weathertimer);
+			zone->zone_weather = 0;
+			zone->weather_intensity = 0;
+		}
+		else if(tmpOldWeather == 2)
+		{
+			if(snowduration == 0)
+				duration = 1;
+			else
+				duration = snowduration*3; //Duration is 1 EQ hour which is 3 earth minutes.
+
+			weathertimer = (duration*60)*1000;
+			Weather_Timer->Start(weathertimer);
+			zone->zone_weather = 0;
+			zone->weather_intensity = 0;
+		}
+	}
+
+	if(changed == false)
+	{
+		if(weathertimer == 0)
+		{
+			uint32 weatherTimerRule = RuleI(Zone, WeatherTimer);
+			weathertimer = weatherTimerRule*1000;
+			Weather_Timer->Start(weathertimer);
+		}
+		LogFile->write(EQEMuLog::Debug, "The next weather check for zone: %s will be in %i seconds.", zone->GetShortName(), Weather_Timer->GetRemainingTime()/1000);
+	}
+	else
+	{
+		LogFile->write(EQEMuLog::Debug, "The weather for zone: %s has changed. Old weather was = %i. New weather is = %i The next check will be in %i seconds. Rain chance: %i, Rain duration: %i, Snow chance %i, Snow duration: %i", zone->GetShortName(), tmpOldWeather, zone_weather,Weather_Timer->GetRemainingTime()/1000,rainchance,rainduration,snowchance,snowduration);
+		this->weatherSend();
+	}
+}
+
+bool Zone::HasWeather()
+{
+	uint8 rain1 = zone->newzone_data.rain_chance[0];
+	uint8 rain2 = zone->newzone_data.rain_chance[1];
+	uint8 rain3 = zone->newzone_data.rain_chance[2];
+	uint8 rain4 = zone->newzone_data.rain_chance[3];
+	uint8 snow1 = zone->newzone_data.snow_chance[0];
+	uint8 snow2 = zone->newzone_data.snow_chance[1];
+	uint8 snow3 = zone->newzone_data.snow_chance[2];
+	uint8 snow4 = zone->newzone_data.snow_chance[3];
+
+	if(rain1 == 0 && rain2 == 0 && rain3 == 0 && rain4 == 0 && snow1 == 0 && snow2 == 0 && snow3 == 0 && snow4 == 0)
+		return false;
+	else
+		return true;
+}
+
 void Zone::StartShutdownTimer(uint32 set_time) {
-	MZoneLock.lock();
 	if (set_time > autoshutdown_timer.GetRemainingTime()) {
 		if (set_time == (RuleI(Zone, AutoShutdownDelay)))
 		{
@@ -1438,21 +1512,44 @@ void Zone::StartShutdownTimer(uint32 set_time) {
 		}
 		autoshutdown_timer.Start(set_time, false);
 	}
-	MZoneLock.unlock();
 }
 
 bool Zone::Depop(bool StartSpawnTimer) {
-std::map<uint32,NPCType *>::iterator itr;
+	std::map<uint32,NPCType *>::iterator itr;
 	entity_list.Depop(StartSpawnTimer);
 
+#ifdef DEPOP_INVALIDATES_NPC_TYPES_CACHE
 	// Refresh npctable, getting current info from database.
 	while(npctable.size()) {
 		itr=npctable.begin();
 		delete itr->second;
 		npctable.erase(itr);
 	}
+#endif
 
 	return true;
+}
+
+void Zone::ClearNPCTypeCache(int id) {
+	if (id <= 0) {
+		auto iter = npctable.begin();
+		while (iter != npctable.end()) {
+			delete iter->second;
+			++iter;
+		}
+		npctable.clear();
+	}
+	else {
+		auto iter = npctable.begin();
+		while (iter != npctable.end()) {
+			if (iter->first == (uint32)id) {
+				delete iter->second;
+				npctable.erase(iter);
+				return;
+			}
+			++iter;
+		}
+	}
 }
 
 void Zone::Repop(uint32 delay) {
@@ -1462,16 +1559,15 @@ void Zone::Repop(uint32 delay) {
 
 	LinkedListIterator<Spawn2*> iterator(spawn2_list);
 
-	MZoneLock.lock();
 	iterator.Reset();
 	while (iterator.MoreElements()) {
 		iterator.RemoveCurrent();
 	}
 
+	quest_manager.ClearAllTimers();
+
 	if (!database.PopulateZoneSpawnList(zoneid, spawn2_list, GetInstanceVersion(), delay))
 		LogFile->write(EQEMuLog::Debug, "Error in Zone::Repop: database.PopulateZoneSpawnList failed");
-
-	MZoneLock.unlock();
 
 	initgrids_timer.Start();
 
@@ -1815,26 +1911,11 @@ bool ZoneDatabase::GetDecayTimes(npcDecayTimes_Struct* npcCorpseDecayTimes) {
 
 void Zone::weatherSend()
 {
-	/*switch(zone_weather)
-	{
-	case 0:
-		entity_list.Message(0, 0, "The sky clears.");
-		break;
-	case 1:
-		entity_list.Message(0, 0, "Raindrops begin to fall from the sky.");
-		break;
-	case 2:
-		entity_list.Message(0, 0, "Snowflakes begin to fall from the sky.");
-		break;
-	default:
-		entity_list.Message(0, 0, "Strange weather patterns form in the sky. (%i)", zone_weather);
-		break;
-	}*/
 	EQApplicationPacket* outapp = new EQApplicationPacket(OP_Weather, 8);
 	if(zone_weather>0)
 		outapp->pBuffer[0] = zone_weather-1;
 	if(zone_weather>0)
-		outapp->pBuffer[4] = 0x10+MakeRandomInt(0, 9); // This number changes in the packets, intensity?
+		outapp->pBuffer[4] = zone->weather_intensity;
 	entity_list.QueueClients(0, outapp);
 	safe_delete(outapp);
 }

@@ -112,7 +112,7 @@ static const uint32 MAX_NUMBER_GUILDS = 1500;
 static const uint32 MAX_PP_LANGUAGE		= 32;	// was 25
 static const uint32 MAX_PP_SPELLBOOK	= 720;	// was 480
 static const uint32 MAX_PP_MEMSPELL		= 16;	// was 12
-static const uint32 MAX_PP_SKILL		= 100;	// was 75
+static const uint32 MAX_PP_SKILL		= _SkillPacketArraySize;	// 100 - actual skills buffer size
 static const uint32 MAX_PP_AA_ARRAY		= 300;
 static const uint32 MAX_PP_DISCIPLINES	= 200;	// was 100
 static const uint32 MAX_GROUP_MEMBERS	= 6;
@@ -529,7 +529,11 @@ struct NewZone_Struct {
 /*0500*/	float	fog_maxclip[4];
 /*0516*/	float	gravity;
 /*0520*/	uint8	time_type;
-/*0521*/	uint8	unknown521[49];
+/*0521*/    uint8   rain_chance[4];
+/*0525*/    uint8   rain_duration[4];
+/*0529*/    uint8   snow_chance[4];
+/*0533*/    uint8   snow_duration[4];
+/*0537*/    uint8   unknown537[33];
 /*0570*/	uint8	sky;					// Sky Type
 /*0571*/	uint8	unknown571[13];			// ***Placeholder
 /*0584*/	float	zone_exp_multiplier;	// Experience Multiplier
@@ -3635,7 +3639,7 @@ struct MobRename_Struct {
 };
 
 struct PlayMP3_Struct {
-	char filename[128];
+	char filename[0];
 };
 
 //this is for custom title display in the skill window
