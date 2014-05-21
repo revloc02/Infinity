@@ -5,6 +5,7 @@
 #include "../common/spdat.h"
 
 #define	HIGHEST_RESIST 9 //Max resist type value
+#define MAX_SPELL_PROJECTILE 10 //Max amount of spell projectiles that can be active by a single mob.
 
 /* solar: macros for IsAttackAllowed, IsBeneficialAllowed */
 #define _CLIENT(x) (x && x->IsClient() && !x->CastToClient()->IsBecomeNPC())
@@ -162,7 +163,8 @@ struct Buffs_Struct {
 	int32	caston_x;
 	int32	caston_y;
 	int32	caston_z;
-	int32  ExtraDIChance;
+	int32	ExtraDIChance;
+	int16	RootBreakChance; //Not saved to dbase
 	bool	persistant_buff;
 	bool	client; //True if the caster is a client
 	bool	UpdateClient;
@@ -308,9 +310,9 @@ struct StatBonuses {
 	int16	IncreaseBlockChance;				// overall block chance modifier
 	uint16	PersistantCasting;					// chance to continue casting through a stun
 	int	XPRateMod;							//i
-	int		HPPercCap;							//Spell effect that limits you to being healed/regening beyond a % of your max
-	int		ManaPercCap;						// ^^
-	int		EndPercCap;							// ^^
+	int		HPPercCap[2];						//Spell effect that limits you to being healed/regening beyond a % of your max
+	int		ManaPercCap[2];						// ^^ 0 = % Cap 1 = Flat Amount Cap
+	int		EndPercCap[2];						// ^^
 	bool	BlockNextSpell;						// Indicates whether the client can block a spell or not
 	//uint16	BlockSpellEffect[EFFECT_COUNT];		// Prevents spells with certain effects from landing on you *no longer used
 	bool	ImmuneToFlee;						// Bypass the fleeing flag
@@ -339,9 +341,12 @@ struct StatBonuses {
 	bool	DivineAura;							// invulnerability
 	bool	DistanceRemoval;					// Check if Cancle if Moved effect is present
 	int16	ImprovedTaunt[3];					// 0 = Max Level 1 = Aggro modifier 2 = buffid
+	int8	Root[2];							// The lowest buff slot a root can be found. [0] = Bool if has root [1] = buff slot
 	int16	FrenziedDevastation;				// base1= AArank(used) base2= chance increase spell criticals + all DD spells 2x mana.
-	//bool	AbsorbMagicAtt;						// Magic Rune *Need to be implemented for NegateEffect
-	//bool	MeleeRune;							// Melee Rune *Need to be implemented for NegateEffect
+	uint16	AbsorbMagicAtt[2];					// 0 = magic rune value 1 = buff slot
+	uint16	MeleeRune[2];						// 0 = rune value 1 = buff slot
+	bool	NegateIfCombat;						// Bool Drop buff if cast or melee
+	int8	Screech;							// -1 = Will be blocked if another Screech is +(1)
 
 	// AAs
 	int8	Packrat;							//weight reduction for items, 1 point = 10%
